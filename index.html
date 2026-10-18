@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src data:">
+<title>Anecdotal assistant</title>
+<style>
+:root{--bg:#EDF2F4;--card:#fff;--ink:#14212B;--mute:#5A6A75;--line:#D3DCE1;--acc:#0E7C86;--accbg:#DCF0F1;--t:#2F5BD3;--tbg:#E3EAFB;--s:#A45F00;--sbg:#FBEBCF;--rec:#C93434}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 "Avenir Next","Segoe UI",system-ui,sans-serif}
+header{background:var(--ink);color:#fff;display:flex;flex-wrap:wrap;gap:12px;align-items:center;padding:12px 20px}
+.brand{font-weight:700;font-size:18px;margin-right:auto}
+header input{background:#22333F;border:1px solid #3A4E5C;color:#fff;border-radius:10px;padding:8px 12px;width:170px;font:inherit}
+.btn{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:10px;padding:8px 14px;font:inherit;font-weight:600;cursor:pointer}
+.btn:disabled{opacity:.45;cursor:not-allowed}.btn.pri{background:var(--acc);border-color:var(--acc);color:#fff}
+.btn.rec{background:var(--rec);border-color:var(--rec);color:#fff;animation:p 1.6s infinite}
+@keyframes p{50%{opacity:.78}}@media(prefers-reduced-motion:reduce){.btn.rec{animation:none}}
+.btn.sm{padding:3px 9px;font-size:13px;font-weight:500}
+:focus-visible{outline:3px solid #7CC4CB;outline-offset:2px}
+nav{display:flex;gap:4px;padding:10px 20px 0;overflow-x:auto}
+nav button{border:0;background:none;padding:10px 16px;font:inherit;font-weight:600;color:var(--mute);cursor:pointer;border-bottom:3px solid transparent}
+nav button.on{color:var(--ink);border-color:var(--acc)}
+main{padding:16px 20px 60px;max-width:1150px;margin:0 auto}
+.grid{display:grid;grid-template-columns:3fr 2fr;gap:16px}.grid2{display:grid;grid-template-columns:230px 1fr;gap:16px}
+@media(max-width:800px){.grid,.grid2{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:16px}
+h2{font-size:17px;margin:0 0 10px}h3{font-size:15px;margin:14px 0 6px}
+.empty{color:var(--mute);text-align:center;padding:36px 16px}
+.tx{min-height:300px;max-height:56vh;overflow:auto;margin-bottom:12px}
+.ln{display:flex;gap:8px;align-items:flex-start;padding:8px 6px;border-bottom:1px solid var(--line)}
+.ln .tx-t{flex:1}.int{color:var(--mute);font-style:italic;padding:8px 6px}
+.b{flex:none;font-size:12px;font-weight:700;border-radius:6px;padding:2px 7px;margin-top:2px}
+.b.T{background:var(--tbg);color:var(--t)}.b.S{background:var(--sbg);color:var(--s)}
+.who{font-size:12px;color:var(--mute)}
+.row{display:flex;gap:8px}.row input,.row select{flex:1;border:1px solid var(--line);border-radius:10px;padding:8px 12px;font:inherit;min-width:0}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 14px;font:inherit;cursor:pointer}
+.chip.on{background:var(--accbg);border-color:var(--acc);font-weight:700}
+.box{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--acc);border-radius:12px;padding:12px 14px;margin-bottom:12px}
+.box h3{margin:0 0 6px}
+.list{padding:8px}.it{display:flex;justify-content:space-between;width:100%;border:0;background:none;padding:9px 12px;border-radius:10px;font:inherit;cursor:pointer;text-align:left}
+.it.on{background:var(--accbg);font-weight:700}.it small{color:var(--mute)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}.seg button{border:0;background:#fff;padding:6px 12px;font:inherit;cursor:pointer}.seg button.on{background:var(--ink);color:#fff}
+.marks{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:8px 0}
+.mk{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--mute)}
+.dots{display:flex;gap:5px}.dot{width:24px;height:24px;border-radius:50%;border:2px solid var(--line);background:#fff;cursor:pointer;padding:0}
+.dot.on{background:var(--acc);border-color:var(--acc)}.dot.sug{border:2px dashed var(--acc)}
+.ent{display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--line)}.ent .tx-t{flex:1}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}@media(max-width:700px){.cols{grid-template-columns:1fr}}
+.cols .card{border-top:5px solid var(--acc)}.cols .card.n{border-top-color:var(--s)}
+.item{display:flex;gap:8px;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)}
+.tag{font-size:12px;color:var(--mute)}
+#tag{position:fixed;display:none;gap:6px;background:var(--ink);padding:6px;border-radius:12px;z-index:9}
+#tag button{border:0;border-radius:8px;padding:7px 12px;font:inherit;font-weight:600;cursor:pointer}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;border-radius:12px;display:none;z-index:9}
+textarea{width:100%;min-height:200px;border:1px solid var(--line);border-radius:10px;padding:10px;font:inherit}
+svg text{font-size:13px;fill:var(--ink)}.note{color:var(--mute);font-size:14px}
+@media print{header,nav,.noprint{display:none!important}body{background:#fff}}
+</style></head><body>
+<header><div class="brand">Anecdotal assistant</div>
+<input id="subj" list="subs" aria-label="Subject" placeholder="Subject"><datalist id="subs"><option>Writing<option>Reading<option>Math<option>Science<option>Social Studies<option>Other</datalist>
+<button id="mic" class="btn"></button><button id="cap" class="btn"></button></header>
+<nav id="nav"></nav><main id="main"></main>
+<div id="tag"><button style="background:#E3EAFB;color:#2F5BD3" data-w="T">Teacher said</button><button style="background:#FBEBCF;color:#A45F00" data-w="S">Student said</button></div>
+<div id="toast"></div>
+<script>
+const KEY='anecdotal-v1',$=s=>document.querySelector(s);
+const fresh=()=>({roster:[],lines:[],marks:{},items:{},subject:'Writing',mode:'dots',hide:false});
+let S;try{S=Object.assign(fresh(),JSON.parse(localStorage.getItem(KEY)))}catch(e){S=fresh()}
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){toast('Could not save on this device.')}};
+function h(t,p,...k){const e=document.createElement(t);for(const[a,v]of Object.entries(p||{})){if(a==='class')e.className=v;else if(a.startsWith('on'))e.addEventListener(a.slice(2),v);else if(a==='dataset')Object.assign(e.dataset,v);else e.setAttribute(a,v)}for(const c of k.flat())if(c!=null&&c!==false)e.append(c.nodeType?c:document.createTextNode(c));return e}
+const sv=(t,p,...k)=>{const e=document.createElementNS('http://www.w3.org/2000/svg',t);for(const[a,v]of Object.entries(p||{}))e.setAttribute(a,v);k.forEach(c=>e.append(c));return e};
+const uid=()=>Math.random().toString(36).slice(2,9),day=()=>new Date().toLocaleDateString('en-CA');
+const fd=d=>new Date(d+'T12:00').toLocaleDateString(undefined,{month:'short',day:'numeric'});
+const nm=s=>!s?'(removed)':S.hide?s.name.split(/\s+/).map(w=>w[0]).join('.')+'.':s.name;
+const stu=id=>S.roster.find(r=>r.id===id);
+const empty=t=>h('div',{class:'card empty'},t);
+const short=(t,n=14)=>{const w=t.split(/\s+/);return w.slice(0,n).join(' ')+(w.length>n?'…':'')};
+function toast(t){const e=$('#toast');e.textContent=t;e.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>e.style.display='none',2600)}
+const CATS=[['participation','Participation'],['knowledge','Knowledge'],['application','Application'],['thinking','Thinking'],['communication','Communication']];
+const KW={knowledge:/\b(know|knows|because|means|learned|fact|remember|correct|right)\b/i,application:/\b(use|used|apply|applied|example|try|tried|add|added|revise|edit|edited)\b/i,thinking:/\b(why|think|thought|predict|compare|maybe|idea|reason|wonder|what if)\b/i,communication:/\b(explain|explained|tell|told|describe|share|shared|said|show)\b/i};
+const TYPES={L:'Learned',S:'Strength',G:'Growth',N:'Next step'};
+let view='live',selS=null,active=[],capturing=false,listening=false,rec=null,interim='',selIds=[],mapRange=0;
+
+/* ---------- listening ---------- */
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+function startMic(){
+ if(!SR){toast('Speech recognition needs Chrome or Edge. You can still type notes.');return}
+ rec=new SR();rec.continuous=true;rec.interimResults=true;rec.lang='en-CA';
+ rec.onresult=e=>{let f='',i='';for(let n=e.resultIndex;n<e.results.length;n++){const r=e.results[n];if(r.isFinal)f+=r[0].transcript;else i+=r[0].transcript}
+  interim=capturing?i:'';if(f.trim())handle(f.trim());renderLive()};
+ rec.onend=()=>{if(listening)try{rec.start()}catch(e){}};
+ rec.onerror=e=>{if(e.error==='not-allowed'||e.error==='service-not-allowed'){listening=false;capturing=false;syncBar();toast('Microphone is blocked. Allow it in the address bar.')}};
+ listening=true;try{rec.start()}catch(e){}syncBar()}
+function stopMic(){listening=false;capturing=false;interim='';try{rec.stop()}catch(e){}syncBar();renderLive()}
+function toggleCap(){capturing=!capturing;interim='';toast(capturing?'Capturing started':'Capturing stopped');syncBar();renderLive()}
+function handle(t){t.split(/sound\s?garden/ig).forEach((p,i)=>{if(i>0)toggleCap();if(capturing&&p.trim())addText(p.trim())})}
+const esc=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+function findNames(t){const first={};S.roster.forEach(s=>{const f=s.name.split(/\s+/)[0].toLowerCase();first[f]=(first[f]||0)+1});
+ return S.roster.filter(s=>{const f=s.name.split(/\s+/)[0].toLowerCase(),k=[s.name.toLowerCase()];if(first[f]===1)k.push(f);return k.some(x=>new RegExp('\\b'+esc(x)+'\\b','i').test(t))}).map(s=>s.id)}
+function guess(t,named){const last=S.lines[S.lines.length-1];
+ if(named||/\?\s*$/.test(t)||/^(ok|okay|so|tell me|show me|what|why|how|can you|great|nice|good|i like|i see|try|remember)\b/i.test(t))return'T';
+ return last?(last.who==='T'?'S':last.who):'T'}
+function addText(t){const ids=findNames(t);const who=guess(t,ids.length>0);if(ids.length)active=ids;
+ S.lines.push({id:uid(),date:day(),subject:S.subject,who,text:t,students:[...active]});save();renderLive()}
+function suggest(ls){const o={participation:Math.min(4,ls.filter(l=>l.who==='S').length)};
+ CATS.slice(1).forEach(([c])=>o[c]=Math.min(4,ls.filter(l=>KW[c].test(l.text)).length));return o}
+
+/* ---------- chrome ---------- */
+function syncBar(){const m=$('#mic'),c=$('#cap');
+ m.textContent=listening?'Stop listening':'Start listening';m.className='btn '+(listening?'':'pri');
+ c.disabled=!listening;c.textContent=capturing?'Capturing — tap to pause':'Paused — say “Soundgarden”';c.className='btn '+(capturing?'rec':'')}
+$('#mic').onclick=()=>listening?stopMic():startMic();$('#cap').onclick=toggleCap;
+$('#subj').value=S.subject;$('#subj').oninput=e=>{S.subject=e.target.value.trim()||'General';save()};
+const NAV=[['live','Live'],['students','Students'],['parent','Parent call'],['map','Map'],['settings','Settings']];
+NAV.forEach(([v,l])=>$('#nav').append(h('button',{dataset:{v},onclick:()=>{view=v;render()}},l)));
+function render(){document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===view));
+ const m=$('#main');m.replaceChildren();({live:vLive,students:vStudents,parent:vParent,map:vMap,settings:vSettings})[view](m);syncBar()}
+
+/* ---------- live ---------- */
+function vLive(m){
+ if(!S.roster.length)m.append(h('div',{class:'card'},'Start by adding your class list in ',h('button',{class:'btn sm',onclick:()=>{view='settings';render()}},'Settings'),'.'));
+ m.append(h('div',{class:'grid'},
+  h('section',{class:'card'},h('h2',{},'Conversation'),h('div',{id:'tx',class:'tx'}),
+   h('div',{class:'row'},h('input',{id:'typed',placeholder:'Or type a note…','aria-label':'Type a note',onkeydown:e=>{if(e.key==='Enter')typed()}}),h('button',{class:'btn',onclick:typed},'Add note')),
+   h('p',{class:'note'},'Highlight text to mark it as Teacher said or Student said.')),
+  h('section',{},h('div',{class:'card'},h('h2',{},'Who is in this conversation'),h('div',{id:'chips',class:'chips'})),h('div',{id:'boxes'}))));
+ renderLive()}
+function typed(){const i=$('#typed'),v=i.value.trim();if(v){addText(v);i.value=''}}
+function renderLive(){if(view!=='live'||!$('#tx'))return;
+ const td=S.lines.filter(l=>l.date===day()),tx=$('#tx');tx.replaceChildren();
+ if(!td.length&&!interim)tx.append(h('div',{class:'empty'},listening?'Say “Soundgarden” to start capturing.':'Press Start listening, or type a note below.'));
+ td.forEach(l=>tx.append(h('div',{class:'ln',dataset:{id:l.id}},h('span',{class:'b '+l.who},l.who==='T'?'Teacher':'Student'),
+  h('div',{class:'tx-t'},l.text,h('div',{class:'who'},l.students.length?l.students.map(i=>nm(stu(i))).join(', '):h('button',{class:'btn sm',onclick:()=>{l.students=[...active];save();renderLive()}},'Assign to selected students'))))));
+ if(interim)tx.append(h('div',{class:'int'},interim));tx.scrollTop=tx.scrollHeight;
+ $('#chips').replaceChildren(...S.roster.map(s=>h('button',{class:'chip'+(active.includes(s.id)?' on':''),'aria-pressed':active.includes(s.id),onclick:()=>{active=active.includes(s.id)?active.filter(x=>x!==s.id):[...active,s.id];renderLive()}},nm(s))));
+ $('#boxes').replaceChildren(...active.map(id=>{const ls=td.filter(l=>l.students.includes(id)).slice(-5);
+  return h('div',{class:'box'},h('h3',{},nm(stu(id))),ls.length?ls.map(l=>h('div',{class:'ent'},h('span',{class:'b '+l.who},l.who==='T'?'T':'S'),h('div',{class:'tx-t'},short(l.text,22)))):h('span',{class:'note'},'Waiting for comments…'))}))}
+
+/* highlight to tag */
+function checkSel(){const t=$('#tag'),sel=getSelection();selIds=[];
+ if(view==='live'&&sel.rangeCount&&!sel.isCollapsed)selIds=[...document.querySelectorAll('#tx .ln')].filter(e=>sel.containsNode(e,true)).map(e=>e.dataset.id);
+ if(!selIds.length){t.style.display='none';return}
+ const r=sel.getRangeAt(0).getBoundingClientRect();t.style.display='flex';t.style.top=Math.max(8,r.top-52)+'px';t.style.left=Math.max(8,Math.min(innerWidth-230,r.left))+'px'}
+document.addEventListener('mouseup',()=>setTimeout(checkSel,0));document.addEventListener('touchend',()=>setTimeout(checkSel,300));document.addEventListener('keyup',checkSel);
+$('#tag').addEventListener('mousedown',e=>e.preventDefault());
+$('#tag').addEventListener('click',e=>{const w=e.target.dataset.w;if(!w)return;S.lines.forEach(l=>{if(selIds.includes(l.id))l.who=w});save();getSelection().removeAllRanges();$('#tag').style.display='none';renderLive()});
+
+/* ---------- students ---------- */
+function vStudents(m){
+ if(!S.roster.length)return m.append(empty('Add your class list in Settings first.'));
+ if(!stu(selS))selS=S.roster[0].id;
+ m.append(h('div',{class:'grid2'},h('div',{class:'card list'},S.roster.map(s=>h('button',{class:'it'+(s.id===selS?' on':''),onclick:()=>{selS=s.id;render()}},nm(s),h('small',{},S.lines.filter(l=>l.students.includes(s.id)).length)))),detail(selS)))}
+const addItem=(sid,type,text)=>{if(!text.trim())return;(S.items[sid]=S.items[sid]||[]).push({id:uid(),type,text:text.trim()});save();render()};
+function marksRow(sid,d,sub,ls){const k=sid+'|'+d+'|'+sub,cur=S.marks[k]||{},sug=suggest(ls);
+ return h('div',{class:'marks'},CATS.map(([c,lab])=>h('div',{class:'mk'},lab,h('span',{class:'dots'},[1,2,3,4].map(n=>h('button',{class:'dot'+(cur[c]!=null?(cur[c]>=n?' on':''):(sug[c]>=n?' sug':'')),'aria-label':lab+' '+n,onclick:()=>{const mm=S.marks[k]=S.marks[k]||{};mm[c]=mm[c]===n?null:n;save();render()}}))))))}
+function detail(sid){
+ const mine=S.lines.filter(l=>l.students.includes(sid)),g={};mine.forEach(l=>(g[l.date+'|'+l.subject]=g[l.date+'|'+l.subject]||[]).push(l));
+ const type=h('select',{'aria-label':'Note type'},Object.entries(TYPES).map(([k,v])=>h('option',{value:k},v))),inp=h('input',{placeholder:'What did they learn, do well, or need next?'});
+ const items=S.items[sid]||[];
+ return h('div',{},
+  h('div',{class:'card'},h('div',{class:'row',style:'align-items:center;justify-content:space-between;flex-wrap:wrap'},h('h2',{style:'margin:0'},nm(stu(sid))),
+   h('div',{class:'seg'},[['dots','Dot jots'],['full','Full text']].map(([k,l])=>h('button',{class:S.mode===k?'on':'',onclick:()=>{S.mode=k;save();render()}},l)))),
+   h('h3',{},'Anecdotal comments'),h('div',{class:'row'},type,inp,h('button',{class:'btn pri',onclick:()=>addItem(sid,type.value,inp.value)},'Add')),
+   Object.keys(TYPES).map(k=>items.filter(i=>i.type===k).length?h('div',{},h('h3',{},TYPES[k]),items.filter(i=>i.type===k).map(itemRow)):null)),
+  Object.keys(g).sort().reverse().map(key=>{const[d,sub]=key.split('|'),ls=g[key];
+   return h('div',{class:'card'},h('h2',{},fd(d)+' · '+sub),marksRow(sid,d,sub,ls),h('p',{class:'note'},'Outlined dots are suggestions from the conversation. Tap to confirm.'),
+    ls.map(l=>h('div',{class:'ent'},h('span',{class:'b '+l.who},l.who==='T'?'Teacher':'Student'),
+     h('div',{class:'tx-t'},S.mode==='dots'?'• '+short(l.text):l.text,l.students.length>1?h('div',{class:'who'},'With '+l.students.filter(i=>i!==sid).map(i=>nm(stu(i))).join(', ')):null),
+     h('button',{class:'btn sm',onclick:()=>addItem(sid,'S',S.mode==='dots'?short(l.text):l.text)},'+ Strength'),
+     h('button',{class:'btn sm',onclick:()=>addItem(sid,'N',S.mode==='dots'?short(l.text):l.text)},'+ Next step'))))}),
+  mine.length?null:empty('No conversations yet. Notes appear here when this student is named.'))}
+function itemRow(i){return h('div',{class:'item'},h('span',{},i.text),h('button',{class:'btn sm noprint','aria-label':'Delete',onclick:()=>{for(const k in S.items)S.items[k]=S.items[k].filter(x=>x.id!==i.id);save();render()}},'Delete'))}
+
+/* ---------- parent call ---------- */
+function vParent(m){
+ if(!S.roster.length)return m.append(empty('Add your class list in Settings first.'));
+ if(!stu(selS))selS=S.roster[0].id;
+ const sel=h('select',{class:'noprint','aria-label':'Student',onchange:e=>{selS=e.target.value;render()}},S.roster.map(s=>h('option',{value:s.id,selected:s.id===selS?'':null},nm(s))));
+ const items=S.items[selS]||[],col=(types,n,title,ph,t)=>{const inp=h('input',{placeholder:ph,class:'noprint'});
+  return h('div',{class:'card '+n},h('h2',{},title),items.filter(i=>types.includes(i.type)).map(itemRow),
+   h('div',{class:'row noprint',style:'margin-top:10px'},inp,h('button',{class:'btn',onclick:()=>addItem(selS,t,inp.value)},'Add')))};
+ m.append(h('div',{class:'card row noprint',style:'align-items:center'},h('h2',{style:'margin:0;flex:none'},'Parent call'),sel,h('button',{class:'btn',onclick:()=>print()},'Print')),
+  h('h2',{},nm(stu(selS))+' — '+fd(day())),
+  h('div',{class:'cols'},col(['L','S','G'],'','Strengths and growth','Add a strength…','S'),col(['N'],'n','Next steps','Add a next step…','N')),
+  h('p',{class:'note noprint'},'Add items from the Students tab with “+ Strength” and “+ Next step”.'))}
+
+/* ---------- map ---------- */
+function vMap(m){
+ const cut=mapRange?new Date(Date.now()-mapRange*864e5).toLocaleDateString('en-CA'):'',cnt={},ed={};
+ S.lines.filter(l=>l.date>=cut).forEach(l=>l.students.forEach(a=>{cnt[a]=(cnt[a]||0)+1;l.students.forEach(b=>{if(a<b)ed[a+'|'+b]=(ed[a+'|'+b]||0)+1})}));
+ const sel=h('select',{'aria-label':'Time range',onchange:e=>{mapRange=+e.target.value;render()}},[[0,'All time'],[7,'Last 7 days'],[30,'Last 30 days']].map(([v,l])=>h('option',{value:v,selected:v===mapRange?'':null},l)));
+ m.append(h('div',{class:'card'},h('div',{class:'row',style:'align-items:center'},h('h2',{style:'margin:0;flex:none'},'Connections'),sel),h('p',{class:'note'},'Lines join students who were in the same conversation. Thicker means more often. Bigger dots have more notes.')));
+ if(!S.roster.length||!Object.keys(ed).length)return m.append(empty('The map appears once students have been grouped together in conversations.'));
+ const n=S.roster.length,pos={};S.roster.forEach((s,i)=>{const a=i/n*Math.PI*2-Math.PI/2;pos[s.id]=[320+190*Math.cos(a),230+170*Math.sin(a)]});
+ const svg=sv('svg',{viewBox:'0 0 640 460',role:'img','aria-label':'Student connection map',style:'width:100%;background:#fff;border:1px solid var(--line);border-radius:14px'});
+ Object.entries(ed).forEach(([k,w])=>{const[a,b]=k.split('|');if(pos[a]&&pos[b])svg.append(sv('line',{x1:pos[a][0],y1:pos[a][1],x2:pos[b][0],y2:pos[b][1],stroke:'#0E7C86','stroke-opacity':.55,'stroke-width':Math.min(10,1+w)}))});
+ S.roster.forEach(s=>{const[x,y]=pos[s.id],c=sv('g',{style:'cursor:pointer',tabindex:0});const go=()=>{selS=s.id;view='students';render()};c.onclick=go;c.onkeydown=e=>{if(e.key==='Enter')go()};
+  const t=sv('text',{x,y:y+(y<230?-16-Math.min(8,cnt[s.id]||0):24),'text-anchor':'middle'});t.textContent=nm(s);
+  c.append(sv('circle',{cx:x,cy:y,r:7+Math.min(10,cnt[s.id]||0),fill:cnt[s.id]?'#0E7C86':'#B9C6CD'}),t);svg.append(c)});
+ m.append(svg)}
+
+/* ---------- settings ---------- */
+function vSettings(m){
+ const ta=h('textarea',{'aria-label':'Class list',placeholder:'One student per line. Use a first name and last initial, like Emily R.'},S.roster.map(s=>s.name).join('\n'));
+ m.append(h('div',{class:'card'},h('h2',{},'Class list'),ta,h('p',{class:'note'},'One name per line. If two students share a first name, add a last initial to each.'),
+  h('button',{class:'btn pri',onclick:()=>{const names=[...new Set(ta.value.split('\n').map(x=>x.trim()).filter(Boolean))].slice(0,60);
+   S.roster=names.map(n=>stu2(n)||{id:uid(),name:n});save();toast('Class list saved');render()}},'Save class list')),
+ h('div',{class:'card'},h('h2',{},'Privacy'),
+  h('p',{},'Notes stay on this device, in this browser. Nothing is uploaded by this page. No audio is recorded or saved, only text. Text is only kept while capturing is on.'),
+  h('p',{},'Chrome and Edge send microphone audio to their own speech service to turn it into text. Ask your school or district whether that is allowed before using real student names.'),
+  h('label',{},h('input',{type:'checkbox',checked:S.hide?'':null,onchange:e=>{S.hide=e.target.checked;save();render()}}),' Show initials instead of names on screen'),
+  h('div',{class:'row',style:'margin-top:14px;flex-wrap:wrap'},h('button',{class:'btn',onclick:exportCsv},'Export notes (CSV)'),
+   h('button',{class:'btn',style:'color:var(--rec)',onclick:()=>{if(confirm('Delete all students, notes and marks from this device? This cannot be undone.')){S=fresh();save();active=[];selS=null;render()}}},'Delete all data'))))}
+const stu2=n=>S.roster.find(r=>r.name===n);
+function exportCsv(){const q=v=>{v=String(v);if(/^[=+\-@]/.test(v))v="'"+v;return '"'+v.replace(/"/g,'""')+'"'},rows=[['date','subject','student','speaker','text']];
+ S.lines.forEach(l=>(l.students.length?l.students:['']).forEach(id=>rows.push([l.date,l.subject,id?nm(stu(id)):'(unassigned)',l.who==='T'?'Teacher':'Student',l.text])));
+ h('a',{href:URL.createObjectURL(new Blob([rows.map(r=>r.map(q).join(',')).join('\n')],{type:'text/csv'})),download:'anecdotal-notes.csv'}).click()}
+render();
+</script></body></html>
