@@ -69,7 +69,7 @@ svg text{font-size:13px;fill:var(--ink)}.note{color:var(--mute);font-size:14px}
 <div id="toast"></div>
 <script>
 const KEY='anecdotal-v1',$=s=>document.querySelector(s);
-const fresh=()=>({roster:[],lines:[],marks:{},items:{},ai:{},codes:{},n:0,sync:{url:'',key:''},aiOn:true,subject:'Writing',mode:'dots',hide:false});
+const fresh=()=>({roster:[],lines:[],marks:{},items:{},ai:{},idYear:null,idLast:0,codes:{},n:0,sync:{url:'',key:''},aiOn:true,subject:'Writing',mode:'dots',hide:false});
 let syncT,syncing=false;
 let S;try{S=Object.assign(fresh(),JSON.parse(localStorage.getItem(KEY)))}catch(e){S=fresh()}
 const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){toast('Could not save on this device.')}queueSync()};
@@ -210,7 +210,7 @@ function vSettings(m){
  const ta=h('textarea',{'aria-label':'Class list',placeholder:'One student per line. Use a first name and last initial, like Emily R.'},S.roster.map(s=>s.name).join('\n'));
  m.append(h('div',{class:'card'},h('h2',{},'Class list'),ta,h('p',{class:'note'},'One name per line. If two students share a first name, add a last initial to each.'),
   h('button',{class:'btn pri',onclick:()=>{const names=[...new Set(ta.value.split('\n').map(x=>x.trim()).filter(Boolean))].slice(0,60);
-   S.roster=names.map(n=>stu2(n)||{id:uid(),name:n});save();toast('Class list saved');render()}},'Save class list')),
+   const old=S.roster;S.roster=names.map(n=>old.find(r=>r.name===n)||{id:'',name:n});S.roster.forEach(r=>{if(!r.id)r.id=newId()});save();toast('Class list saved');render()}},'Save class list')),
  syncCard(),
  h('div',{class:'card'},h('h2',{},'Privacy'),
   h('p',{},'Notes stay in this browser unless you connect your Google Sheet. If the AI helper is on, student names are swapped for codes before any text leaves your browser. No audio is recorded or saved, only text, and text is only kept while capturing is on.'),
@@ -238,7 +238,7 @@ async function push(){if(!S.sync.url)return toast('Add the web app URL in Settin
 async function pull(){if(!S.sync.url)return toast('Add the web app URL in Settings first.');setSync('Loading from sheet…');
  try{const r=await api('pull');if(r.error){setSync('Sheet error: '+r.error);return}const st=r.state,ai=st.ai||{};
   if(ai.__codes){S.codes=ai.__codes.codes||{};S.n=ai.__codes.n||0;delete ai.__codes}
-  syncing=true;Object.assign(S,{roster:st.roster,lines:st.lines,marks:st.marks,items:st.items,ai});save();syncing=false;active=[];selS=null;setSync('Loaded from sheet');render()}
+  syncing=true;Object.assign(S,{roster:st.roster,lines:st.lines,marks:st.marks,items:st.items,ai});migrateIds();save();syncing=false;active=[];selS=null;setSync('Loaded from sheet');render()}
  catch(e){syncing=false;setSync(netMsg(e))}}
 async function analyze(sid,d,sub,quiet){
  if(!S.aiOn||!S.sync.url)return;const k=sid+'|'+d+'|'+sub,ls=S.lines.filter(l=>l.date===d&&l.subject===sub&&l.students.includes(sid));if(!ls.length)return;
@@ -273,5 +273,15 @@ function syncCard(){const u=h('input',{placeholder:'Web app URL (ends in /exec)'
    h('button',{class:'btn',onclick:push},'Save to sheet now'),h('button',{class:'btn',onclick:()=>confirm('Replace the notes on this device with the sheet?')&&pull()},'Load from sheet')),
   h('p',{id:'syncmsg',class:'note',role:'status'},''),
   h('p',{class:'note'},'Only the web app URL and the passcode go here. The Gemini key stays in the Apps Script, never in this page.'))}
+/* ---------- student IDs: STU-26-001, STU-26-002, ... ---------- */
+const ID_RE=/^STU-\d\d-\d{3}$/;
+function newId(){S.idYear=S.idYear||String(new Date().getFullYear()).slice(2);
+ let n=S.idLast||0;S.roster.forEach(r=>{const m=/^STU-\d\d-(\d{3})$/.exec(r.id||'');if(m)n=Math.max(n,+m[1])});
+ S.idLast=n+1;return 'STU-'+S.idYear+'-'+String(n+1).padStart(3,'0')}
+function migrateIds(){const map={};S.roster.forEach(r=>{if(!ID_RE.test(r.id)){const o=r.id;r.id=newId();map[o]=r.id}});
+ if(!Object.keys(map).length)return false;const m=i=>map[i]||i,rk=(o,f)=>{const n={};for(const k in o)n[f(k)]=o[k];return n},mk=k=>{const p=k.split('|');p[0]=m(p[0]);return p.join('|')};
+ S.lines.forEach(l=>l.students=l.students.map(m));S.marks=rk(S.marks,mk);S.ai=rk(S.ai,mk);S.items=rk(S.items,m);S.codes=rk(S.codes,m);
+ active=active.map(m);if(selS)selS=m(selS);return true}
+if(migrateIds())save();
 render();
 </script></body></html>
