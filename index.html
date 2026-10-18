@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src data:">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src https://script.google.com https://script.googleusercontent.com; img-src data:">
 <title>Anecdotal assistant</title>
 <style>
 :root{--bg:#EDF2F4;--card:#fff;--ink:#14212B;--mute:#5A6A75;--line:#D3DCE1;--acc:#0E7C86;--accbg:#DCF0F1;--t:#2F5BD3;--tbg:#E3EAFB;--s:#A45F00;--sbg:#FBEBCF;--rec:#C93434}
@@ -53,20 +53,26 @@ h2{font-size:17px;margin:0 0 10px}h3{font-size:15px;margin:14px 0 6px}
 #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;border-radius:12px;display:none;z-index:9}
 textarea{width:100%;min-height:200px;border:1px solid var(--line);border-radius:10px;padding:10px;font:inherit}
 svg text{font-size:13px;fill:var(--ink)}.note{color:var(--mute);font-size:14px}
+.convo{display:flex;gap:12px;align-items:stretch;margin-bottom:12px}.convo .tx{flex:1;margin-bottom:0;min-width:0}
+.mic{width:78px;flex:none;writing-mode:vertical-rl;font-size:19px;letter-spacing:.05em;border-radius:14px;min-height:300px}
+.mic.on{background:var(--ink);border-color:var(--ink);color:#fff}
+@media(max-width:800px){.convo{flex-direction:column-reverse}.mic{writing-mode:horizontal-tb;width:100%;min-height:0;padding:14px}}
+.ai{background:var(--accbg);border-radius:12px;padding:4px 14px 12px;margin:8px 0}.ai ul{margin:4px 0;padding-left:20px}.ai .item{border-color:#B9DDE0}
 @media print{header,nav,.noprint{display:none!important}body{background:#fff}}
 </style></head><body>
 <header><div class="brand">Anecdotal assistant</div>
 <input id="subj" list="subs" aria-label="Subject" placeholder="Subject"><datalist id="subs"><option>Writing<option>Reading<option>Math<option>Science<option>Social Studies<option>Other</datalist>
-<button id="mic" class="btn"></button><button id="cap" class="btn"></button></header>
+<span id="sync" style="color:#9FB3C0;font-size:13px"></span><button id="cap" class="btn"></button></header>
 <nav id="nav"></nav><main id="main"></main>
 <div id="tag"><button style="background:#E3EAFB;color:#2F5BD3" data-w="T">Teacher said</button><button style="background:#FBEBCF;color:#A45F00" data-w="S">Student said</button></div>
 <div id="toast"></div>
 <script>
 const KEY='anecdotal-v1',$=s=>document.querySelector(s);
-const fresh=()=>({roster:[],lines:[],marks:{},items:{},subject:'Writing',mode:'dots',hide:false});
+const fresh=()=>({roster:[],lines:[],marks:{},items:{},ai:{},codes:{},n:0,sync:{url:'',key:''},aiOn:true,subject:'Writing',mode:'dots',hide:false});
+let syncT,syncing=false;
 let S;try{S=Object.assign(fresh(),JSON.parse(localStorage.getItem(KEY)))}catch(e){S=fresh()}
-const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){toast('Could not save on this device.')}};
-function h(t,p,...k){const e=document.createElement(t);for(const[a,v]of Object.entries(p||{})){if(a==='class')e.className=v;else if(a.startsWith('on'))e.addEventListener(a.slice(2),v);else if(a==='dataset')Object.assign(e.dataset,v);else e.setAttribute(a,v)}for(const c of k.flat())if(c!=null&&c!==false)e.append(c.nodeType?c:document.createTextNode(c));return e}
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){toast('Could not save on this device.')}queueSync()};
+function h(t,p,...k){const e=document.createElement(t);for(const[a,v]of Object.entries(p||{})){if(v==null||v===false)continue;if(a==='class')e.className=v;else if(a.startsWith('on'))e.addEventListener(a.slice(2),v);else if(a==='dataset')Object.assign(e.dataset,v);else e.setAttribute(a,v)}for(const c of k.flat())if(c!=null&&c!==false)e.append(c.nodeType?c:document.createTextNode(c));return e}
 const sv=(t,p,...k)=>{const e=document.createElementNS('http://www.w3.org/2000/svg',t);for(const[a,v]of Object.entries(p||{}))e.setAttribute(a,v);k.forEach(c=>e.append(c));return e};
 const uid=()=>Math.random().toString(36).slice(2,9),day=()=>new Date().toLocaleDateString('en-CA');
 const fd=d=>new Date(d+'T12:00').toLocaleDateString(undefined,{month:'short',day:'numeric'});
@@ -90,12 +96,12 @@ function startMic(){
  rec.onend=()=>{if(listening)try{rec.start()}catch(e){}};
  rec.onerror=e=>{if(e.error==='not-allowed'||e.error==='service-not-allowed'){listening=false;capturing=false;syncBar();toast('Microphone is blocked. Allow it in the address bar.')}};
  listening=true;try{rec.start()}catch(e){}syncBar()}
-function stopMic(){listening=false;capturing=false;interim='';try{rec.stop()}catch(e){}syncBar();renderLive()}
-function toggleCap(){capturing=!capturing;interim='';toast(capturing?'Capturing started':'Capturing stopped');syncBar();renderLive()}
+function stopMic(){listening=false;capturing=false;interim='';try{rec.stop()}catch(e){}syncBar();renderLive();autoAnalyze()}
+function toggleCap(){capturing=!capturing;interim='';toast(capturing?'Capturing started':'Capturing stopped');syncBar();renderLive();if(!capturing)autoAnalyze()}
 function handle(t){t.split(/sound\s?garden/ig).forEach((p,i)=>{if(i>0)toggleCap();if(capturing&&p.trim())addText(p.trim())})}
 const esc=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 function findNames(t){const first={};S.roster.forEach(s=>{const f=s.name.split(/\s+/)[0].toLowerCase();first[f]=(first[f]||0)+1});
- return S.roster.filter(s=>{const f=s.name.split(/\s+/)[0].toLowerCase(),k=[s.name.toLowerCase()];if(first[f]===1)k.push(f);return k.some(x=>new RegExp('\\b'+esc(x)+'\\b','i').test(t))}).map(s=>s.id)}
+ return S.roster.filter(s=>{const f=s.name.split(/\s+/)[0].toLowerCase(),k=[s.name.toLowerCase().replace(/[.\s]+$/,'')];if(first[f]===1)k.push(f);return k.some(x=>new RegExp('\\b'+esc(x)+'\\b','i').test(t))}).map(s=>s.id)}
 function guess(t,named){const last=S.lines[S.lines.length-1];
  if(named||/\?\s*$/.test(t)||/^(ok|okay|so|tell me|show me|what|why|how|can you|great|nice|good|i like|i see|try|remember)\b/i.test(t))return'T';
  return last?(last.who==='T'?'S':last.who):'T'}
@@ -106,10 +112,10 @@ function suggest(ls){const o={participation:Math.min(4,ls.filter(l=>l.who==='S')
 
 /* ---------- chrome ---------- */
 function syncBar(){const m=$('#mic'),c=$('#cap');
- m.textContent=listening?'Stop listening':'Start listening';m.className='btn '+(listening?'':'pri');
+ if(m){m.textContent=listening?'Stop listening':'Start listening';m.className='btn mic '+(listening?'on':'pri')}
  c.disabled=!listening;c.textContent=capturing?'Capturing — tap to pause':'Paused — say “Soundgarden”';c.className='btn '+(capturing?'rec':'')}
-$('#mic').onclick=()=>listening?stopMic():startMic();$('#cap').onclick=toggleCap;
-$('#subj').value=S.subject;$('#subj').oninput=e=>{S.subject=e.target.value.trim()||'General';save()};
+$('#cap').onclick=toggleCap;
+$('#subj').value=S.subject;$('#subj').oninput=e=>{S.subject=e.target.value.replace(/\|/g,'').trim()||'General';save()};
 const NAV=[['live','Live'],['students','Students'],['parent','Parent call'],['map','Map'],['settings','Settings']];
 NAV.forEach(([v,l])=>$('#nav').append(h('button',{dataset:{v},onclick:()=>{view=v;render()}},l)));
 function render(){document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===view));
@@ -119,7 +125,7 @@ function render(){document.querySelectorAll('#nav button').forEach(b=>b.classLis
 function vLive(m){
  if(!S.roster.length)m.append(h('div',{class:'card'},'Start by adding your class list in ',h('button',{class:'btn sm',onclick:()=>{view='settings';render()}},'Settings'),'.'));
  m.append(h('div',{class:'grid'},
-  h('section',{class:'card'},h('h2',{},'Conversation'),h('div',{id:'tx',class:'tx'}),
+  h('section',{class:'card'},h('h2',{},'Conversation'),h('div',{class:'convo'},h('div',{id:'tx',class:'tx'}),h('button',{id:'mic',class:'btn mic','aria-label':'Start or stop listening',onclick:()=>listening?stopMic():startMic()})),
    h('div',{class:'row'},h('input',{id:'typed',placeholder:'Or type a note…','aria-label':'Type a note',onkeydown:e=>{if(e.key==='Enter')typed()}}),h('button',{class:'btn',onclick:typed},'Add note')),
    h('p',{class:'note'},'Highlight text to mark it as Teacher said or Student said.')),
   h('section',{},h('div',{class:'card'},h('h2',{},'Who is in this conversation'),h('div',{id:'chips',class:'chips'})),h('div',{id:'boxes'}))));
@@ -142,7 +148,7 @@ function checkSel(){const t=$('#tag'),sel=getSelection();selIds=[];
  const r=sel.getRangeAt(0).getBoundingClientRect();t.style.display='flex';t.style.top=Math.max(8,r.top-52)+'px';t.style.left=Math.max(8,Math.min(innerWidth-230,r.left))+'px'}
 document.addEventListener('mouseup',()=>setTimeout(checkSel,0));document.addEventListener('touchend',()=>setTimeout(checkSel,300));document.addEventListener('keyup',checkSel);
 $('#tag').addEventListener('mousedown',e=>e.preventDefault());
-$('#tag').addEventListener('click',e=>{const w=e.target.dataset.w;if(!w)return;S.lines.forEach(l=>{if(selIds.includes(l.id))l.who=w});save();getSelection().removeAllRanges();$('#tag').style.display='none';renderLive()});
+$('#tag').addEventListener('click',e=>{const w=e.target.dataset.w;if(!w)return;S.lines.forEach(l=>{if(selIds.includes(l.id)){l.who=w;l.manual=1}});save();getSelection().removeAllRanges();$('#tag').style.display='none';renderLive()});
 
 /* ---------- students ---------- */
 function vStudents(m){
@@ -150,7 +156,7 @@ function vStudents(m){
  if(!stu(selS))selS=S.roster[0].id;
  m.append(h('div',{class:'grid2'},h('div',{class:'card list'},S.roster.map(s=>h('button',{class:'it'+(s.id===selS?' on':''),onclick:()=>{selS=s.id;render()}},nm(s),h('small',{},S.lines.filter(l=>l.students.includes(s.id)).length)))),detail(selS)))}
 const addItem=(sid,type,text)=>{if(!text.trim())return;(S.items[sid]=S.items[sid]||[]).push({id:uid(),type,text:text.trim()});save();render()};
-function marksRow(sid,d,sub,ls){const k=sid+'|'+d+'|'+sub,cur=S.marks[k]||{},sug=suggest(ls);
+function marksRow(sid,d,sub,ls){const k=sid+'|'+d+'|'+sub,cur=S.marks[k]||{},sug=(S.ai[k]&&S.ai[k].marks)||suggest(ls);
  return h('div',{class:'marks'},CATS.map(([c,lab])=>h('div',{class:'mk'},lab,h('span',{class:'dots'},[1,2,3,4].map(n=>h('button',{class:'dot'+(cur[c]!=null?(cur[c]>=n?' on':''):(sug[c]>=n?' sug':'')),'aria-label':lab+' '+n,onclick:()=>{const mm=S.marks[k]=S.marks[k]||{};mm[c]=mm[c]===n?null:n;save();render()}}))))))}
 function detail(sid){
  const mine=S.lines.filter(l=>l.students.includes(sid)),g={};mine.forEach(l=>(g[l.date+'|'+l.subject]=g[l.date+'|'+l.subject]||[]).push(l));
@@ -162,7 +168,7 @@ function detail(sid){
    h('h3',{},'Anecdotal comments'),h('div',{class:'row'},type,inp,h('button',{class:'btn pri',onclick:()=>addItem(sid,type.value,inp.value)},'Add')),
    Object.keys(TYPES).map(k=>items.filter(i=>i.type===k).length?h('div',{},h('h3',{},TYPES[k]),items.filter(i=>i.type===k).map(itemRow)):null)),
   Object.keys(g).sort().reverse().map(key=>{const[d,sub]=key.split('|'),ls=g[key];
-   return h('div',{class:'card'},h('h2',{},fd(d)+' · '+sub),marksRow(sid,d,sub,ls),h('p',{class:'note'},'Outlined dots are suggestions from the conversation. Tap to confirm.'),
+   return h('div',{class:'card'},h('div',{class:'row',style:'align-items:center;justify-content:space-between'},h('h2',{style:'margin:0'},fd(d)+' · '+sub),S.aiOn&&S.sync.url?h('button',{class:'btn sm noprint',onclick:()=>analyze(sid,d,sub,false)},S.ai[sid+'|'+d+'|'+sub]?'Re-run AI':'Analyze with AI'):null),marksRow(sid,d,sub,ls),h('p',{class:'note'},'Outlined dots are suggestions. Tap to confirm.'),aiPanel(sid,d,sub),
     ls.map(l=>h('div',{class:'ent'},h('span',{class:'b '+l.who},l.who==='T'?'Teacher':'Student'),
      h('div',{class:'tx-t'},S.mode==='dots'?'• '+short(l.text):l.text,l.students.length>1?h('div',{class:'who'},'With '+l.students.filter(i=>i!==sid).map(i=>nm(stu(i))).join(', ')):null),
      h('button',{class:'btn sm',onclick:()=>addItem(sid,'S',S.mode==='dots'?short(l.text):l.text)},'+ Strength'),
@@ -204,8 +210,9 @@ function vSettings(m){
  m.append(h('div',{class:'card'},h('h2',{},'Class list'),ta,h('p',{class:'note'},'One name per line. If two students share a first name, add a last initial to each.'),
   h('button',{class:'btn pri',onclick:()=>{const names=[...new Set(ta.value.split('\n').map(x=>x.trim()).filter(Boolean))].slice(0,60);
    S.roster=names.map(n=>stu2(n)||{id:uid(),name:n});save();toast('Class list saved');render()}},'Save class list')),
+ syncCard(),
  h('div',{class:'card'},h('h2',{},'Privacy'),
-  h('p',{},'Notes stay on this device, in this browser. Nothing is uploaded by this page. No audio is recorded or saved, only text. Text is only kept while capturing is on.'),
+  h('p',{},'Notes stay in this browser unless you connect your Google Sheet. If the AI helper is on, student names are swapped for codes before any text leaves your browser. No audio is recorded or saved, only text, and text is only kept while capturing is on.'),
   h('p',{},'Chrome and Edge send microphone audio to their own speech service to turn it into text. Ask your school or district whether that is allowed before using real student names.'),
   h('label',{},h('input',{type:'checkbox',checked:S.hide?'':null,onchange:e=>{S.hide=e.target.checked;save();render()}}),' Show initials instead of names on screen'),
   h('div',{class:'row',style:'margin-top:14px;flex-wrap:wrap'},h('button',{class:'btn',onclick:exportCsv},'Export notes (CSV)'),
@@ -214,5 +221,45 @@ const stu2=n=>S.roster.find(r=>r.name===n);
 function exportCsv(){const q=v=>{v=String(v);if(/^[=+\-@]/.test(v))v="'"+v;return '"'+v.replace(/"/g,'""')+'"'},rows=[['date','subject','student','speaker','text']];
  S.lines.forEach(l=>(l.students.length?l.students:['']).forEach(id=>rows.push([l.date,l.subject,id?nm(stu(id)):'(unassigned)',l.who==='T'?'Teacher':'Student',l.text])));
  h('a',{href:URL.createObjectURL(new Blob([rows.map(r=>r.map(q).join(',')).join('\n')],{type:'text/csv'})),download:'anecdotal-notes.csv'}).click()}
+/* ---------- sheet + AI ---------- */
+const lbl=id=>'Student '+(S.codes[id]||(S.codes[id]=++S.n));
+const rest=t=>String(t||'').replace(/Student (\d+)/g,(m,n)=>{const id=Object.keys(S.codes).find(i=>S.codes[i]==n);return id&&stu(id)?nm(stu(id)):m});
+function hide(t){const p=[];S.roster.forEach(s=>{const f=s.name.split(/\s+/)[0],dup=S.roster.filter(r=>r.name.split(/\s+/)[0].toLowerCase()===f.toLowerCase()).length>1;p.push([s.name.replace(/[.\s]+$/,''),lbl(s.id)]);if(!dup)p.push([f,lbl(s.id)])});
+ p.sort((a,b)=>b[0].length-a[0].length).forEach(([k,c])=>t=t.replace(new RegExp('\\b'+esc(k)+'\\b','ig'),c));return t}
+async function api(action,extra){const r=await fetch(S.sync.url,{method:'POST',body:JSON.stringify(Object.assign({action,key:S.sync.key},extra))});return r.json()}
+const setSync=t=>{$('#sync').textContent=t};
+function queueSync(){if(syncing||!S.sync||!S.sync.url)return;clearTimeout(syncT);syncT=setTimeout(push,4000)}
+async function push(){if(!S.sync.url)return toast('Add the web app URL in Settings first.');setSync('Saving to sheet…');
+ try{const r=await api('push',{state:{roster:S.roster,lines:S.lines,marks:S.marks,items:S.items,ai:Object.assign({},S.ai,{__codes:{codes:S.codes,n:S.n}})}});
+  setSync(r.error?'Sheet error: '+r.error:'Saved to sheet '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}))}catch(e){setSync('Could not reach the sheet')}}
+async function pull(){if(!S.sync.url)return toast('Add the web app URL in Settings first.');setSync('Loading from sheet…');
+ try{const r=await api('pull');if(r.error){setSync('Sheet error: '+r.error);return}const st=r.state,ai=st.ai||{};
+  if(ai.__codes){S.codes=ai.__codes.codes||{};S.n=ai.__codes.n||0;delete ai.__codes}
+  syncing=true;Object.assign(S,{roster:st.roster,lines:st.lines,marks:st.marks,items:st.items,ai});save();syncing=false;active=[];selS=null;setSync('Loaded from sheet');render()}
+ catch(e){syncing=false;setSync('Could not reach the sheet')}}
+async function analyze(sid,d,sub,quiet){
+ if(!S.aiOn||!S.sync.url)return;const k=sid+'|'+d+'|'+sub,ls=S.lines.filter(l=>l.date===d&&l.subject===sub&&l.students.includes(sid));if(!ls.length)return;
+ if(!quiet)toast('AI is reading the notes…');
+ const payload={student:lbl(sid),subject:sub,lines:ls.map(l=>({who:l.who==='T'?'Teacher':'Student',text:hide(l.text)}))};
+ try{const r=await api('analyze',{payload});if(r.error)return toast('AI: '+r.error);const a=r.result||{},arr=x=>Array.isArray(x)?x.map(String).slice(0,6):[],mk={};
+  CATS.forEach(([c])=>mk[c]=Math.max(0,Math.min(4,Math.round(+(a.marks||{})[c]||0))));
+  (a.speakers||[]).forEach((w,i)=>{if(ls[i]&&!ls[i].manual&&(w==='T'||w==='S'))ls[i].who=w});
+  S.ai[k]={marks:mk,learned:arr(a.learned),strengths:arr(a.strengths),growth:arr(a.growth),next_steps:arr(a.next_steps),dots:arr(a.dots),full:String(a.full||''),n:ls.length,used:[]};
+  save();view==='live'?renderLive():view==='students'&&render()}catch(e){toast('Could not reach the AI helper.')}}
+async function autoAnalyze(){if(!S.aiOn||!S.sync||!S.sync.url)return;
+ for(const s of S.roster){const ls=S.lines.filter(l=>l.date===day()&&l.subject===S.subject&&l.students.includes(s.id)),a=S.ai[s.id+'|'+day()+'|'+S.subject];
+  if(ls.length&&(!a||a.n!==ls.length))await analyze(s.id,day(),S.subject,true)}}
+function aiPanel(sid,d,sub){const a=S.ai[sid+'|'+d+'|'+sub];if(!a)return null;a.used=a.used||[];
+ const rows=[];[['learned','L','Learned'],['strengths','S','Strength'],['growth','G','Growth'],['next_steps','N','Next step']].forEach(([f,t,lab])=>(a[f]||[]).forEach(x=>{if(!a.used.includes(x))rows.push({t,lab,x})}));
+ return h('div',{class:'ai'},h('h3',{},'AI summary'),S.mode==='dots'?h('ul',{},(a.dots||[]).map(x=>h('li',{},rest(x)))):h('p',{},rest(a.full)),
+  rows.length?h('h3',{},'Suggested comments'):null,
+  rows.map(r=>h('div',{class:'item'},h('span',{},h('span',{class:'tag'},r.lab+': '),rest(r.x)),h('button',{class:'btn sm',onclick:()=>{a.used.push(r.x);addItem(sid,r.t,rest(r.x))}},'Add'))),
+  rows.length>1?h('button',{class:'btn sm',style:'margin-top:8px',onclick:()=>{rows.forEach(r=>{a.used.push(r.x);(S.items[sid]=S.items[sid]||[]).push({id:uid(),type:r.t,text:rest(r.x)})});save();render()}},'Add all'):null)}
+function syncCard(){const u=h('input',{placeholder:'Web app URL from Apps Script','aria-label':'Web app URL',value:S.sync.url}),k=h('input',{type:'password',placeholder:'Passcode','aria-label':'Passcode',value:S.sync.key});
+ return h('div',{class:'card'},h('h2',{},'Google Sheet and AI helper'),h('div',{class:'row',style:'flex-wrap:wrap'},u,k),
+  h('label',{style:'display:block;margin:10px 0'},h('input',{type:'checkbox',checked:S.aiOn?'':null,onchange:e=>{S.aiOn=e.target.checked;save()}}),' AI helper: sort notes into marks and comments'),
+  h('div',{class:'row',style:'flex-wrap:wrap'},h('button',{class:'btn pri',onclick:()=>{S.sync={url:u.value.trim(),key:k.value};save();push()}},'Save and connect'),
+   h('button',{class:'btn',onclick:push},'Save to sheet now'),h('button',{class:'btn',onclick:()=>confirm('Replace the notes on this device with the sheet?')&&pull()},'Load from sheet')),
+  h('p',{class:'note'},'Notes save to the sheet a few seconds after each change. Each note keeps its date, so you can filter by student and date in the sheet.'))}
 render();
 </script></body></html>
