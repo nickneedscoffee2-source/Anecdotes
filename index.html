@@ -59,6 +59,7 @@ svg text{font-size:13px;fill:var(--ink)}.note{color:var(--mute);font-size:14px}
 .mic.on{background:var(--ink);border-color:var(--ink);color:#fff}
 @media(max-width:800px){.convo{flex-direction:column-reverse}.mic{writing-mode:horizontal-tb;width:100%;min-height:0;padding:14px}}
 .ai{background:var(--accbg);border-radius:12px;padding:4px 14px 12px;margin:8px 0}.ai ul{margin:4px 0;padding-left:20px}.ai .item{border-color:#B9DDE0}
+.icon{border:0;background:none;color:var(--mute);cursor:pointer;padding:6px;border-radius:8px;flex:none;display:inline-flex;align-self:flex-start}.icon:hover{background:#FBE3E3;color:var(--rec)}
 @media print{header,nav,.noprint{display:none!important}body{background:#fff}}
 </style></head><body>
 <header><div class="brand">Anecdotal assistant</div>
@@ -81,7 +82,7 @@ const nm=s=>!s?'(removed)':S.hide?s.name.split(/\s+/).map(w=>w[0]).join('.')+'.'
 const stu=id=>S.roster.find(r=>r.id===id);
 const empty=t=>h('div',{class:'card empty'},t);
 const short=(t,n=14)=>{const w=t.split(/\s+/);return w.slice(0,n).join(' ')+(w.length>n?'…':'')};
-function toast(t){const e=$('#toast');e.textContent=t;e.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>e.style.display='none',2600)}
+function toast(t,undo){const e=$('#toast');e.replaceChildren(t);if(undo)e.append(' ',h('button',{class:'btn sm',onclick:()=>{undo();e.style.display='none'}},'Undo'));e.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>e.style.display='none',undo?7000:2600)}
 const CATS=[['participation','Participation'],['knowledge','Knowledge'],['application','Application'],['thinking','Thinking'],['communication','Communication']];
 const KW={knowledge:/\b(know|knows|because|means|learned|fact|remember|correct|right)\b/i,application:/\b(use|used|apply|applied|example|try|tried|add|added|revise|edit|edited)\b/i,thinking:/\b(why|think|thought|predict|compare|maybe|idea|reason|wonder|what if)\b/i,communication:/\b(explain|explained|tell|told|describe|share|shared|said|show)\b/i};
 const TYPES={L:'Learned',S:'Strength',G:'Growth',N:'Next step'};
@@ -136,7 +137,7 @@ function renderLive(){if(view!=='live'||!$('#tx'))return;
  const td=S.lines.filter(l=>l.date===day()),tx=$('#tx');tx.replaceChildren();
  if(!td.length&&!interim)tx.append(h('div',{class:'empty'},listening?'Say “Soundgarden” to start capturing.':'Press Start listening, or type a note below.'));
  td.forEach(l=>tx.append(h('div',{class:'ln',dataset:{id:l.id}},h('span',{class:'b '+l.who},l.who==='T'?'Teacher':'Student'),
-  h('div',{class:'tx-t'},l.text,h('div',{class:'who'},l.students.length?l.students.map(i=>nm(stu(i))).join(', '):h('button',{class:'btn sm',onclick:()=>{l.students=[...active];save();renderLive()}},'Assign to selected students'))))));
+  h('div',{class:'tx-t'},l.text,h('div',{class:'who'},l.students.length?l.students.map(i=>nm(stu(i))).join(', '):h('button',{class:'btn sm',onclick:()=>{l.students=[...active];save();renderLive()}},'Assign to selected students'))),h('button',{class:'icon noprint','aria-label':'Delete this line',title:'Delete this line',onclick:()=>delLine(l.id)},trash()))));
  if(interim)tx.append(h('div',{class:'int'},interim));tx.scrollTop=tx.scrollHeight;
  $('#chips').replaceChildren(...S.roster.map(s=>h('button',{class:'chip'+(active.includes(s.id)?' on':''),'aria-pressed':active.includes(s.id),onclick:()=>{active=active.includes(s.id)?active.filter(x=>x!==s.id):[...active,s.id];renderLive()}},nm(s))));
  $('#boxes').replaceChildren(...active.map(id=>{const ls=td.filter(l=>l.students.includes(id)).slice(-5);
@@ -173,7 +174,8 @@ function detail(sid){
     ls.map(l=>h('div',{class:'ent'},h('span',{class:'b '+l.who},l.who==='T'?'Teacher':'Student'),
      h('div',{class:'tx-t'},S.mode==='dots'?'• '+short(l.text):l.text,l.students.length>1?h('div',{class:'who'},'With '+l.students.filter(i=>i!==sid).map(i=>nm(stu(i))).join(', ')):null),
      h('button',{class:'btn sm',onclick:()=>addItem(sid,'S',S.mode==='dots'?short(l.text):l.text)},'+ Strength'),
-     h('button',{class:'btn sm',onclick:()=>addItem(sid,'N',S.mode==='dots'?short(l.text):l.text)},'+ Next step'))))}),
+     h('button',{class:'btn sm',onclick:()=>addItem(sid,'N',S.mode==='dots'?short(l.text):l.text)},'+ Next step'),
+     h('button',{class:'icon noprint','aria-label':'Remove this line from '+nm(stu(sid)),title:'Remove from this student',onclick:()=>delLine(l.id,sid)},trash()))))}),
   mine.length?null:empty('No conversations yet. Notes appear here when this student is named.'))}
 function itemRow(i){return h('div',{class:'item'},h('span',{},i.text),h('button',{class:'btn sm noprint','aria-label':'Delete',onclick:()=>{for(const k in S.items)S.items[k]=S.items[k].filter(x=>x.id!==i.id);save();render()}},'Delete'))}
 
@@ -273,6 +275,15 @@ function syncCard(){const u=h('input',{placeholder:'Web app URL (ends in /exec)'
    h('button',{class:'btn',onclick:push},'Save to sheet now'),h('button',{class:'btn',onclick:()=>confirm('Replace the notes on this device with the sheet?')&&pull()},'Load from sheet')),
   h('p',{id:'syncmsg',class:'note',role:'status'},''),
   h('p',{class:'note'},'Only the web app URL and the passcode go here. The Gemini key stays in the Apps Script, never in this page.'))}
+/* ---------- delete lines ---------- */
+const trash=()=>sv('svg',{viewBox:'0 0 24 24',width:18,height:18,fill:'none',stroke:'currentColor','stroke-width':2,'stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'},sv('path',{d:'M3 6h18'}),sv('path',{d:'M8 6V4h8v2'}),sv('path',{d:'M6 6l1 14h10l1-14'}),sv('path',{d:'M10 11v6M14 11v6'}));
+function delLine(id,sid){const i=S.lines.findIndex(l=>l.id===id);if(i<0)return;const l=S.lines[i],snap=JSON.stringify(l),shared=sid&&l.students.length>1,
+ keys=(shared?[sid]:l.students).map(x=>x+'|'+l.date+'|'+l.subject),savedAi={};
+ keys.forEach(k=>{if(S.ai[k]){savedAi[k]=S.ai[k];delete S.ai[k]}});
+ if(shared)l.students=l.students.filter(x=>x!==sid);else S.lines.splice(i,1);
+ const redraw=()=>view==='live'?renderLive():render();save();redraw();
+ toast(shared?'Removed from '+nm(stu(sid))+'’s notes. It stays for the rest of the group.':'Deleted.',()=>{const o=JSON.parse(snap),j=S.lines.findIndex(x=>x.id===id);
+  if(j>=0)S.lines[j]=o;else S.lines.splice(Math.min(i,S.lines.length),0,o);Object.assign(S.ai,savedAi);save();redraw()})}
 /* ---------- student IDs: STU-26-001, STU-26-002, ... ---------- */
 const ID_RE=/^STU-\d\d-\d{3}$/;
 function newId(){S.idYear=S.idYear||String(schoolYear()).slice(2);
