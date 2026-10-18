@@ -59,14 +59,14 @@ svg text{font-size:13px;fill:var(--ink)}.note{color:var(--mute);font-size:14px}
 .mic.on{background:var(--ink);border-color:var(--ink);color:#fff}
 @media(max-width:800px){.convo{flex-direction:column-reverse}.mic{writing-mode:horizontal-tb;width:100%;min-height:0;padding:14px}}
 .ai{background:var(--accbg);border-radius:12px;padding:4px 14px 12px;margin:8px 0}.ai ul{margin:4px 0;padding-left:20px}.ai .item{border-color:#B9DDE0}
-.icon{border:0;background:none;color:var(--mute);cursor:pointer;padding:6px;border-radius:8px;flex:none;display:inline-flex;align-self:flex-start}.icon:hover{background:#FBE3E3;color:var(--rec)}
+#tag{flex-wrap:wrap;max-width:360px}.icon{border:0;background:none;color:var(--mute);cursor:pointer;padding:6px;border-radius:8px;flex:none;display:inline-flex;align-self:flex-start}.icon:hover{background:#FBE3E3;color:var(--rec)}
 @media print{header,nav,.noprint{display:none!important}body{background:#fff}}
 </style></head><body>
 <header><div class="brand">Anecdotal assistant</div>
 <input id="subj" list="subs" aria-label="Subject" placeholder="Subject"><datalist id="subs"><option>Writing<option>Reading<option>Math<option>Science<option>Social Studies<option>Other</datalist>
 <span id="sync" style="color:#9FB3C0;font-size:13px"></span><button id="cap" class="btn"></button></header>
 <nav id="nav"></nav><main id="main"></main>
-<div id="tag"><button style="background:#E3EAFB;color:#2F5BD3" data-w="T">Teacher said</button><button style="background:#FBEBCF;color:#A45F00" data-w="S">Student said</button></div>
+<div id="tag"></div>
 <div id="toast"></div>
 <script>
 const KEY='anecdotal-v1',$=s=>document.querySelector(s);
@@ -108,8 +108,8 @@ function guess(t,named){const last=S.lines[S.lines.length-1];
  if(named||/\?\s*$/.test(t)||/^(ok|okay|so|tell me|show me|what|why|how|can you|great|nice|good|i like|i see|try|remember)\b/i.test(t))return'T';
  return last?(last.who==='T'?'S':last.who):'T'}
 function addText(t){const ids=findNames(t);const who=guess(t,ids.length>0);if(ids.length)active=ids;
- S.lines.push({id:uid(),date:day(),subject:S.subject,who,text:t,students:[...active]});save();renderLive()}
-function suggest(ls){const o={participation:Math.min(4,ls.filter(l=>l.who==='S').length)};
+ S.lines.push({id:uid(),date:day(),subject:S.subject,who,text:t,students:[...active],sp:who==='S'&&active.length===1?active[0]:undefined});save();renderLive()}
+function suggest(ls,sid){const o={participation:Math.min(4,ls.filter(l=>l.who==='S'&&(!l.sp||l.sp===sid)).length)};
  CATS.slice(1).forEach(([c])=>o[c]=Math.min(4,ls.filter(l=>KW[c].test(l.text)).length));return o}
 
 /* ---------- chrome ---------- */
@@ -136,21 +136,31 @@ function typed(){const i=$('#typed'),v=i.value.trim();if(v){addText(v);i.value='
 function renderLive(){if(view!=='live'||!$('#tx'))return;
  const td=S.lines.filter(l=>l.date===day()),tx=$('#tx');tx.replaceChildren();
  if(!td.length&&!interim)tx.append(h('div',{class:'empty'},listening?'Say “Soundgarden” to start capturing.':'Press Start listening, or type a note below.'));
- td.forEach(l=>tx.append(h('div',{class:'ln',dataset:{id:l.id}},h('span',{class:'b '+l.who},l.who==='T'?'Teacher':'Student'),
+ td.forEach(l=>tx.append(h('div',{class:'ln',dataset:{id:l.id}},h('span',{class:'b '+l.who},spk(l)),
   h('div',{class:'tx-t'},l.text,h('div',{class:'who'},l.students.length?l.students.map(i=>nm(stu(i))).join(', '):h('button',{class:'btn sm',onclick:()=>{l.students=[...active];save();renderLive()}},'Assign to selected students'))),h('button',{class:'icon noprint','aria-label':'Delete this line',title:'Delete this line',onclick:()=>delLine(l.id)},trash()))));
  if(interim)tx.append(h('div',{class:'int'},interim));tx.scrollTop=tx.scrollHeight;
  $('#chips').replaceChildren(...S.roster.map(s=>h('button',{class:'chip'+(active.includes(s.id)?' on':''),'aria-pressed':active.includes(s.id),onclick:()=>{active=active.includes(s.id)?active.filter(x=>x!==s.id):[...active,s.id];renderLive()}},nm(s))));
  $('#boxes').replaceChildren(...active.map(id=>{const ls=td.filter(l=>l.students.includes(id)).slice(-5);
-  return h('div',{class:'box'},h('h3',{},nm(stu(id))),ls.length?ls.map(l=>h('div',{class:'ent'},h('span',{class:'b '+l.who},l.who==='T'?'T':'S'),h('div',{class:'tx-t'},short(l.text,22)))):h('span',{class:'note'},'Waiting for comments…'))}))}
+  return h('div',{class:'box'},h('h3',{},nm(stu(id))),ls.length?ls.map(l=>h('div',{class:'ent'},h('span',{class:'b '+l.who},l.who==='T'?'T':(l.sp?spk(l):'S')),h('div',{class:'tx-t'},short(l.text,22)))):h('span',{class:'note'},'Waiting for comments…'))}))}
 
 /* highlight to tag */
 function checkSel(){const t=$('#tag'),sel=getSelection();selIds=[];
  if(view==='live'&&sel.rangeCount&&!sel.isCollapsed)selIds=[...document.querySelectorAll('#tx .ln')].filter(e=>sel.containsNode(e,true)).map(e=>e.dataset.id);
  if(!selIds.length){t.style.display='none';return}
- const r=sel.getRangeAt(0).getBoundingClientRect();t.style.display='flex';t.style.top=Math.max(8,r.top-52)+'px';t.style.left=Math.max(8,Math.min(innerWidth-230,r.left))+'px'}
-document.addEventListener('mouseup',()=>setTimeout(checkSel,0));document.addEventListener('touchend',()=>setTimeout(checkSel,300));document.addEventListener('keyup',checkSel);
+ const r=sel.getRangeAt(0).getBoundingClientRect();tagMenu(false);t.style.display='flex';t.style.top=Math.max(8,r.top-t.offsetHeight-8)+'px';t.style.left=Math.max(8,Math.min(innerWidth-370,r.left))+'px'}
+const inTag=e=>e.target.closest&&e.target.closest('#tag');document.addEventListener('mouseup',e=>{if(!inTag(e))setTimeout(checkSel,0)});document.addEventListener('touchend',e=>{if(!inTag(e))setTimeout(checkSel,300)});document.addEventListener('keyup',checkSel);
 $('#tag').addEventListener('mousedown',e=>e.preventDefault());
-$('#tag').addEventListener('click',e=>{const w=e.target.dataset.w;if(!w)return;S.lines.forEach(l=>{if(selIds.includes(l.id)){l.who=w;l.manual=1}});save();getSelection().removeAllRanges();$('#tag').style.display='none';renderLive()});
+function tagMenu(all){const t=$('#tag');let ids=[];
+ S.lines.forEach(l=>{if(selIds.includes(l.id))l.students.forEach(x=>{if(!ids.includes(x))ids.push(x)})});active.forEach(x=>{if(!ids.includes(x))ids.push(x)});
+ const full=all||!ids.length,list=S.roster.filter(r=>full||ids.includes(r.id));
+ t.replaceChildren(h('button',{style:'background:#E3EAFB;color:#2F5BD3',dataset:{w:'T'}},'Teacher said'),
+  list.map(r=>h('button',{style:'background:#FBEBCF;color:#A45F00',dataset:{w:'S',sid:r.id}},nm(r)+' said')),
+  S.roster.length?null:h('button',{style:'background:#FBEBCF;color:#A45F00',dataset:{w:'S'}},'Student said'),
+  full?null:h('button',{style:'background:#fff;color:#14212B',dataset:{more:'1'}},'Someone else…'))}
+$('#tag').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.more){tagMenu(true);return}
+ const w=b.dataset.w,sid=b.dataset.sid;if(!w)return;
+ S.lines.forEach(l=>{if(selIds.includes(l.id)){l.who=w;l.manual=1;if(w==='T'||!sid)delete l.sp;else{l.sp=sid;if(!l.students.includes(sid))l.students.push(sid)}}});
+ save();getSelection().removeAllRanges();$('#tag').style.display='none';renderLive()});
 
 /* ---------- students ---------- */
 function vStudents(m){
@@ -158,7 +168,7 @@ function vStudents(m){
  if(!stu(selS))selS=S.roster[0].id;
  m.append(h('div',{class:'grid2'},h('div',{class:'card list'},S.roster.map(s=>h('button',{class:'it'+(s.id===selS?' on':''),onclick:()=>{selS=s.id;render()}},nm(s),h('small',{},S.lines.filter(l=>l.students.includes(s.id)).length)))),detail(selS)))}
 const addItem=(sid,type,text)=>{if(!text.trim())return;(S.items[sid]=S.items[sid]||[]).push({id:uid(),type,text:text.trim()});save();render()};
-function marksRow(sid,d,sub,ls){const k=sid+'|'+d+'|'+sub,cur=S.marks[k]||{},sug=(S.ai[k]&&S.ai[k].marks)||suggest(ls);
+function marksRow(sid,d,sub,ls){const k=sid+'|'+d+'|'+sub,cur=S.marks[k]||{},sug=(S.ai[k]&&S.ai[k].marks)||suggest(ls,sid);
  return h('div',{class:'marks'},CATS.map(([c,lab])=>h('div',{class:'mk'},lab,h('span',{class:'dots'},[1,2,3,4].map(n=>h('button',{class:'dot'+(cur[c]!=null?(cur[c]>=n?' on':''):(sug[c]>=n?' sug':'')),'aria-label':lab+' '+n,onclick:()=>{const mm=S.marks[k]=S.marks[k]||{};mm[c]=mm[c]===n?null:n;save();render()}}))))))}
 function detail(sid){
  const mine=S.lines.filter(l=>l.students.includes(sid)),g={};mine.forEach(l=>(g[l.date+'|'+l.subject]=g[l.date+'|'+l.subject]||[]).push(l));
@@ -171,7 +181,7 @@ function detail(sid){
    Object.keys(TYPES).map(k=>items.filter(i=>i.type===k).length?h('div',{},h('h3',{},TYPES[k]),items.filter(i=>i.type===k).map(itemRow)):null)),
   Object.keys(g).sort().reverse().map(key=>{const[d,sub]=key.split('|'),ls=g[key];
    return h('div',{class:'card'},h('div',{class:'row',style:'align-items:center;justify-content:space-between'},h('h2',{style:'margin:0'},fd(d)+' · '+sub),S.aiOn&&S.sync.url?h('button',{class:'btn sm noprint',onclick:()=>analyze(sid,d,sub,false)},S.ai[sid+'|'+d+'|'+sub]?'Re-run AI':'Analyze with AI'):null),marksRow(sid,d,sub,ls),h('p',{class:'note'},'Outlined dots are suggestions. Tap to confirm.'),aiPanel(sid,d,sub),
-    ls.map(l=>h('div',{class:'ent'},h('span',{class:'b '+l.who},l.who==='T'?'Teacher':'Student'),
+    ls.map(l=>h('div',{class:'ent'},h('span',{class:'b '+l.who},spk(l)),
      h('div',{class:'tx-t'},S.mode==='dots'?'• '+short(l.text):l.text,l.students.length>1?h('div',{class:'who'},'With '+l.students.filter(i=>i!==sid).map(i=>nm(stu(i))).join(', ')):null),
      h('button',{class:'btn sm',onclick:()=>addItem(sid,'S',S.mode==='dots'?short(l.text):l.text)},'+ Strength'),
      h('button',{class:'btn sm',onclick:()=>addItem(sid,'N',S.mode==='dots'?short(l.text):l.text)},'+ Next step'),
@@ -222,7 +232,7 @@ function vSettings(m){
    h('button',{class:'btn',style:'color:var(--rec)',onclick:()=>{if(confirm('Delete all students, notes and marks from this device? This cannot be undone.')){S=fresh();save();active=[];selS=null;render()}}},'Delete all data'))))}
 const stu2=n=>S.roster.find(r=>r.name===n);
 function exportCsv(){const q=v=>{v=String(v);if(/^[=+\-@]/.test(v))v="'"+v;return '"'+v.replace(/"/g,'""')+'"'},rows=[['date','subject','student','speaker','text']];
- S.lines.forEach(l=>(l.students.length?l.students:['']).forEach(id=>rows.push([l.date,l.subject,id?nm(stu(id)):'(unassigned)',l.who==='T'?'Teacher':'Student',l.text])));
+ S.lines.forEach(l=>(l.students.length?l.students:['']).forEach(id=>rows.push([l.date,l.subject,id?nm(stu(id)):'(unassigned)',l.who==='T'?'Teacher':(l.sp&&stu(l.sp)?'Student: '+stu(l.sp).name:'Student'),l.text])));
  h('a',{href:URL.createObjectURL(new Blob([rows.map(r=>r.map(q).join(',')).join('\n')],{type:'text/csv'})),download:'anecdotal-notes.csv'}).click()}
 /* ---------- sheet + AI ---------- */
 const lbl=id=>'Student '+(S.codes[id]||(S.codes[id]=++S.n));
@@ -245,10 +255,10 @@ async function pull(){if(!S.sync.url)return toast('Add the web app URL in Settin
 async function analyze(sid,d,sub,quiet){
  if(!S.aiOn||!S.sync.url)return;const k=sid+'|'+d+'|'+sub,ls=S.lines.filter(l=>l.date===d&&l.subject===sub&&l.students.includes(sid));if(!ls.length)return;
  if(!quiet)toast('AI is reading the notes…');
- const payload={student:lbl(sid),subject:sub,lines:ls.map(l=>({who:l.who==='T'?'Teacher':'Student',text:hide(l.text)}))};
+ const payload={student:lbl(sid),subject:sub,lines:ls.map(l=>({who:l.who==='T'?'Teacher':'Student',speaker:l.sp?lbl(l.sp):undefined,text:hide(l.text)}))};
  try{const r=await api('analyze',{payload});if(r.error)return toast('AI: '+r.error);const a=r.result||{},arr=x=>Array.isArray(x)?x.map(String).slice(0,6):[],mk={};
   CATS.forEach(([c])=>mk[c]=Math.max(0,Math.min(4,Math.round(+(a.marks||{})[c]||0))));
-  (a.speakers||[]).forEach((w,i)=>{if(ls[i]&&!ls[i].manual&&(w==='T'||w==='S'))ls[i].who=w});
+  (a.speakers||[]).forEach((w,i)=>{if(ls[i]&&!ls[i].manual&&(w==='T'||w==='S')){ls[i].who=w;if(w==='T')delete ls[i].sp}});
   S.ai[k]={marks:mk,learned:arr(a.learned),strengths:arr(a.strengths),growth:arr(a.growth),next_steps:arr(a.next_steps),dots:arr(a.dots),full:String(a.full||''),n:ls.length,used:[]};
   save();view==='live'?renderLive():view==='students'&&render()}catch(e){toast('Could not reach the AI helper.')}}
 async function autoAnalyze(){if(!S.aiOn||!S.sync||!S.sync.url)return;
@@ -276,6 +286,7 @@ function syncCard(){const u=h('input',{placeholder:'Web app URL (ends in /exec)'
   h('p',{id:'syncmsg',class:'note',role:'status'},''),
   h('p',{class:'note'},'Only the web app URL and the passcode go here. The Gemini key stays in the Apps Script, never in this page.'))}
 /* ---------- delete lines ---------- */
+const spk=l=>l.who==='T'?'Teacher':(l.sp&&stu(l.sp)?nm(stu(l.sp)):'Student');
 const trash=()=>sv('svg',{viewBox:'0 0 24 24',width:18,height:18,fill:'none',stroke:'currentColor','stroke-width':2,'stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'},sv('path',{d:'M3 6h18'}),sv('path',{d:'M8 6V4h8v2'}),sv('path',{d:'M6 6l1 14h10l1-14'}),sv('path',{d:'M10 11v6M14 11v6'}));
 function delLine(id,sid){const i=S.lines.findIndex(l=>l.id===id);if(i<0)return;const l=S.lines[i],snap=JSON.stringify(l),shared=sid&&l.students.length>1,
  keys=(shared?[sid]:l.students).map(x=>x+'|'+l.date+'|'+l.subject),savedAi={};
