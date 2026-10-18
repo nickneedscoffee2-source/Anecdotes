@@ -120,7 +120,7 @@ $('#subj').value=S.subject;$('#subj').oninput=e=>{S.subject=e.target.value.repla
 const NAV=[['live','Live'],['students','Students'],['parent','Parent call'],['map','Map'],['settings','Settings']];
 NAV.forEach(([v,l])=>$('#nav').append(h('button',{dataset:{v},onclick:()=>{view=v;render()}},l)));
 function render(){document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===view));
- const m=$('#main');m.replaceChildren();({live:vLive,students:vStudents,parent:vParent,map:vMap,settings:vSettings})[view](m);syncBar()}
+ const m=$('#main');m.replaceChildren();if(newYearDue())m.append(yearBanner());({live:vLive,students:vStudents,parent:vParent,map:vMap,settings:vSettings})[view](m);syncBar()}
 
 /* ---------- live ---------- */
 function vLive(m){
@@ -211,7 +211,7 @@ function vSettings(m){
  m.append(h('div',{class:'card'},h('h2',{},'Class list'),ta,h('p',{class:'note'},'One name per line. If two students share a first name, add a last initial to each.'),
   h('button',{class:'btn pri',onclick:()=>{const names=[...new Set(ta.value.split('\n').map(x=>x.trim()).filter(Boolean))].slice(0,60);
    const old=S.roster;S.roster=names.map(n=>old.find(r=>r.name===n)||{id:'',name:n});S.roster.forEach(r=>{if(!r.id)r.id=newId()});save();toast('Class list saved');render()}},'Save class list')),
- syncCard(),
+ syncCard(),yearCard(),
  h('div',{class:'card'},h('h2',{},'Privacy'),
   h('p',{},'Notes stay in this browser unless you connect your Google Sheet. If the AI helper is on, student names are swapped for codes before any text leaves your browser. No audio is recorded or saved, only text, and text is only kept while capturing is on.'),
   h('p',{},'Chrome and Edge send microphone audio to their own speech service to turn it into text. Ask your school or district whether that is allowed before using real student names.'),
@@ -275,13 +275,31 @@ function syncCard(){const u=h('input',{placeholder:'Web app URL (ends in /exec)'
   h('p',{class:'note'},'Only the web app URL and the passcode go here. The Gemini key stays in the Apps Script, never in this page.'))}
 /* ---------- student IDs: STU-26-001, STU-26-002, ... ---------- */
 const ID_RE=/^STU-\d\d-\d{3}$/;
-function newId(){S.idYear=S.idYear||String(new Date().getFullYear()).slice(2);
+function newId(){S.idYear=S.idYear||String(schoolYear()).slice(2);
  let n=S.idLast||0;S.roster.forEach(r=>{const m=/^STU-\d\d-(\d{3})$/.exec(r.id||'');if(m)n=Math.max(n,+m[1])});
  S.idLast=n+1;return 'STU-'+S.idYear+'-'+String(n+1).padStart(3,'0')}
 function migrateIds(){const map={};S.roster.forEach(r=>{if(!ID_RE.test(r.id)){const o=r.id;r.id=newId();map[o]=r.id}});
  if(!Object.keys(map).length)return false;const m=i=>map[i]||i,rk=(o,f)=>{const n={};for(const k in o)n[f(k)]=o[k];return n},mk=k=>{const p=k.split('|');p[0]=m(p[0]);return p.join('|')};
  S.lines.forEach(l=>l.students=l.students.map(m));S.marks=rk(S.marks,mk);S.ai=rk(S.ai,mk);S.items=rk(S.items,m);S.codes=rk(S.codes,m);
  active=active.map(m);if(selS)selS=m(selS);return true}
+/* ---------- school year ---------- */
+const schoolYear=()=>{const d=new Date();return d.getMonth()>=6?d.getFullYear():d.getFullYear()-1};
+const yearLabel=y=>y+'–'+String(y+1).slice(2);
+const newYearDue=()=>S.idYear&&S.roster.length&&String(schoolYear()).slice(2)!==S.idYear;
+function startNewYear(){const y=schoolYear();
+ if(!confirm('Start the '+yearLabel(y)+' school year?\n\nThis downloads a copy of this year\'s notes, then clears all students and notes from this device and restarts student numbers at 001.\n\nIt also disconnects from the current Google Sheet so last year\'s sheet is not changed. Tip: in Google Sheets, use File > Make a copy to keep it.'))return;
+ exportCsv();
+ const keep={aiOn:S.aiOn,subject:S.subject,mode:S.mode,hide:S.hide};
+ S=Object.assign(fresh(),keep);active=[];selS=null;save();setSync('');view='settings';render();
+ toast('New year started. Add your class list, then connect a new sheet.')}
+const yearBanner=()=>h('div',{class:'card noprint',style:'border-left:5px solid var(--s)'},
+ h('p',{style:'margin:0 0 10px'},'A new school year has started ('+yearLabel(schoolYear())+'). Start fresh so student numbers return to 001.'),
+ h('button',{class:'btn pri sm',onclick:startNewYear},'Start new school year'));
+function yearCard(){const yy=S.idYear||String(schoolYear()).slice(2),next='STU-'+yy+'-'+String((S.idLast||0)+1).padStart(3,'0');
+ return h('div',{class:'card'},h('h2',{},'School year'),
+  h('p',{},'Student numbers for this class look like STU-'+yy+'-001. The next new student gets '+next+'.'),
+  h('button',{class:'btn',onclick:startNewYear},'Start new school year'),
+  h('p',{class:'note'},'Downloads a copy of this year\'s notes, clears the app, and restarts numbering at 001. It does not touch your Google Sheet.'))}
 if(migrateIds())save();
 render();
 </script></body></html>
