@@ -60,7 +60,9 @@ svg text{font-size:13px;fill:var(--ink)}.note{color:var(--mute);font-size:14px}
 @media(max-width:800px){.convo{flex-direction:column-reverse}.mic{writing-mode:horizontal-tb;width:100%;min-height:0;padding:14px}}
 .ai{background:var(--accbg);border-radius:12px;padding:4px 14px 12px;margin:8px 0}.ai ul{margin:4px 0;padding-left:20px}.ai .item{border-color:#B9DDE0}
 header select{background:#22333F;border:1px solid #3A4E5C;color:#fff;border-radius:10px;padding:8px 10px;font:inherit;max-width:200px}header select option{color:#14212B;background:#fff}
-#tag{flex-wrap:wrap;max-width:360px}.ck{margin-top:6px;width:18px;height:18px;flex:none}.bulkp{background:var(--accbg);border-radius:12px;padding:10px 12px;margin:8px 0 12px}#bulk{margin-bottom:6px}
+#tag{flex-wrap:wrap;max-width:360px}.chipx{border:1px solid var(--line);background:#fff;border-radius:999px;padding:1px 9px;font:inherit;font-size:12px;cursor:pointer;margin:0 4px 2px 0}.chipx:hover,.chipx.on{background:#FBE3E3;border-color:var(--rec)}.rmq{display:inline-block;margin-left:4px;color:var(--ink)}
+.sg{padding:6px 8px;border-radius:8px;margin-bottom:4px}.sg.hl{background:#FFF3C4;outline:2px solid #E7C84A}.fb{display:block;width:100%;text-align:left;border:1px solid var(--line);background:#fff;border-radius:10px;padding:8px 12px;margin:0 0 6px;font:inherit;cursor:pointer}.fb:hover{border-color:var(--acc);background:var(--accbg)}
+.ck{margin-top:6px;width:18px;height:18px;flex:none}.bulkp{background:var(--accbg);border-radius:12px;padding:10px 12px;margin:8px 0 12px}#bulk{margin-bottom:6px}
 .icon{border:0;background:none;color:var(--mute);cursor:pointer;padding:6px;border-radius:8px;flex:none;display:inline-flex;align-self:flex-start}.icon:hover{background:#FBE3E3;color:var(--rec)}
 @media print{header,nav,.noprint{display:none!important}body{background:#fff}}
 </style></head><body>
@@ -72,7 +74,7 @@ header select{background:#22333F;border:1px solid #3A4E5C;color:#fff;border-radi
 <div id="toast"></div>
 <script>
 const KEY='anecdotal-v1',$=s=>document.querySelector(s);
-const fresh=()=>({roster:[],lines:[],marks:{},items:{},ai:{},joinSec:8,idYear:null,idLast:0,codes:{},n:0,sync:{url:'',key:''},aiOn:true,subject:'Language',strand:'',term:'',mode:'dots',hide:false});
+const fresh=()=>({roster:[],lines:[],marks:{},items:{},ai:{},joinSec:8,grade:'',lmode:'dots',lessons:[],idYear:null,idLast:0,codes:{},n:0,sync:{url:'',key:''},aiOn:true,subject:'Language',strand:'',term:'',mode:'dots',hide:false});
 let syncT,syncing=false;
 let S;try{S=Object.assign(fresh(),JSON.parse(localStorage.getItem(KEY)))}catch(e){S=fresh()}
 const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){toast('Could not save on this device.')}queueSync()};
@@ -112,11 +114,12 @@ function buildCtx(){normSubjects();if(!CURR[S.subject])S.subject='Other';if(S.st
  $('#ctx').replaceChildren(
   osel('Subject',SUBJ.map(x=>[x,x]),S.subject,v=>{S.subject=v;S.strand='';save();buildCtx()}),
   osel('Strand',[['','Any strand']].concat(CURR[S.subject].map(x=>[x,x])),S.strand,v=>{S.strand=v;save()}),
-  osel('Reporting period',TERMS.map(x=>[x,x]),S.term,v=>{S.term=v;save()}))}
+  osel('Reporting period',TERMS.map(x=>[x,x]),S.term,v=>{S.term=v;save()}),
+  osel('Grade',[['','Grade']].concat([1,2,3,4,5,6,7,8].map(g=>[String(g),'Grade '+g])),S.grade||'',v=>{S.grade=v;save()}))}
 const meta=l=>[l.subject,l.strand,l.term].filter(Boolean).join(' · ');
 const grpMeta=ls=>[ls[0].term,[...new Set(ls.map(l=>l.strand).filter(Boolean))].join(', ')].filter(Boolean).join(' · ');
 const termOf=(sid,d,sub)=>{const l=S.lines.find(x=>x.date===d&&x.subject===sub&&x.students.includes(sid)&&x.term);return l?l.term:S.term};
-let view='live',selS=null,active=[],capturing=false,listening=false,rec=null,interim='',selIds=[],mapRange=0,pTerm='',fTerm='',fSub='',checked=new Set(),bulkTo=new Set();
+let view='live',selS=null,active=[],capturing=false,listening=false,rec=null,interim='',selIds=[],mapRange=0,pTerm='',fTerm='',fSub='',checked=new Set(),bulkTo=new Set(),rmP=null,lessonOn=false,lessonMic=false,lessonSel=null,lHl=new Set(),lf={sub:'',strand:'',term:'',grade:'',from:'',to:''};
 
 /* ---------- listening ---------- */
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -124,13 +127,13 @@ function startMic(){
  if(!SR){toast('Speech recognition needs Chrome or Edge. You can still type notes.');return}
  rec=new SR();rec.continuous=true;rec.interimResults=true;rec.lang='en-CA';
  rec.onresult=e=>{let f='',i='';for(let n=e.resultIndex;n<e.results.length;n++){const r=e.results[n];if(r.isFinal)f+=r[0].transcript;else i+=r[0].transcript}
-  interim=capturing?i:'';if(f.trim())handle(f.trim());renderLive()};
+  interim=(capturing||lessonOn)?i:'';if(f.trim())handle(f.trim());renderLive();renderLesson()};
  rec.onend=()=>{if(listening)try{rec.start()}catch(e){}};
  rec.onerror=e=>{if(e.error==='not-allowed'||e.error==='service-not-allowed'){listening=false;capturing=false;syncBar();toast('Microphone is blocked. Allow it in the address bar.')}};
  listening=true;try{rec.start()}catch(e){}syncBar()}
-function stopMic(){listening=false;capturing=false;interim='';try{rec.stop()}catch(e){}syncBar();renderLive();autoAnalyze()}
+function stopMic(){lessonFinish();lessonMic=false;listening=false;capturing=false;interim='';try{rec.stop()}catch(e){}syncBar();renderLive();autoAnalyze()}
 function toggleCap(){capturing=!capturing;interim='';toast(capturing?'Capturing started':'Capturing stopped');syncBar();renderLive();if(!capturing)autoAnalyze()}
-function handle(t){t.split(/sound\s?garden/ig).forEach((p,i)=>{if(i>0)toggleCap();if(capturing&&p.trim())addText(p.trim())})}
+function handle(t){if(lessonOn){addLessonText(t);return}t.split(/sound\s?garden/ig).forEach((p,i)=>{if(i>0)toggleCap();if(capturing&&p.trim())addText(p.trim())})}
 const esc=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 function findNames(t){const first={};S.roster.forEach(s=>{const f=s.name.split(/\s+/)[0].toLowerCase();first[f]=(first[f]||0)+1});
  return S.roster.filter(s=>{const f=s.name.split(/\s+/)[0].toLowerCase(),k=[s.name.toLowerCase().replace(/[.\s]+$/,'')];if(first[f]===1)k.push(f);return k.some(x=>new RegExp('\\b'+esc(x)+'\\b','i').test(t))}).map(s=>s.id)}
@@ -148,13 +151,13 @@ function suggest(ls,sid){const o={participation:Math.min(4,ls.filter(l=>l.who===
 /* ---------- chrome ---------- */
 function syncBar(){const m=$('#mic'),c=$('#cap');
  if(m){m.textContent=listening?'Stop listening':'Start listening';m.className='btn mic '+(listening?'on':'pri')}
- c.disabled=!listening;c.textContent=capturing?'Capturing — tap to pause':'Paused — say “Soundgarden”';c.className='btn '+(capturing?'rec':'')}
+ c.disabled=!listening||lessonOn;c.textContent=lessonOn?'Lesson recording…':capturing?'Capturing — tap to pause':'Paused — say “Soundgarden”';c.className='btn '+(capturing?'rec':'')}
 $('#cap').onclick=toggleCap;
 buildCtx();
-const NAV=[['live','Live'],['students','Students'],['parent','Parent call'],['map','Map'],['settings','Settings']];
+const NAV=[['live','Live'],['students','Students'],['parent','Parent call'],['lesson','Lesson Feedback'],['map','Map'],['settings','Settings']];
 NAV.forEach(([v,l])=>$('#nav').append(h('button',{dataset:{v},onclick:()=>{view=v;render()}},l)));
 function render(){document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===view));
- const m=$('#main');m.replaceChildren();if(newYearDue())m.append(yearBanner());({live:vLive,students:vStudents,parent:vParent,map:vMap,settings:vSettings})[view](m);syncBar()}
+ const m=$('#main');m.replaceChildren();if(newYearDue())m.append(yearBanner());({live:vLive,students:vStudents,parent:vParent,lesson:vLesson,map:vMap,settings:vSettings})[view](m);syncBar()}
 
 /* ---------- live ---------- */
 function vLive(m){
@@ -170,7 +173,7 @@ function renderLive(){if(view!=='live'||!$('#tx'))return;
  const td=S.lines.filter(l=>l.date===day()),tx=$('#tx');tx.replaceChildren();
  if(!td.length&&!interim)tx.append(h('div',{class:'empty'},listening?'Say “Soundgarden” to start capturing.':'Press Start listening, or type a note below.'));
  td.forEach(l=>tx.append(h('div',{class:'ln',dataset:{id:l.id}},h('input',{type:'checkbox',class:'ck','aria-label':'Select this comment',checked:checked.has(l.id)?'':null,onchange:e=>{e.target.checked?checked.add(l.id):checked.delete(l.id);renderBulk()}}),h('span',{class:'b '+l.who},spk(l)),
-  h('div',{class:'tx-t'},l.text,h('div',{class:'who'},meta(l)),h('div',{class:'who'},l.students.length?l.students.map(i=>nm(stu(i))).join(', '):h('button',{class:'btn sm',onclick:()=>{l.students=[...active];save();renderLive()}},'Assign to selected students'))),h('button',{class:'icon noprint','aria-label':'Delete this line',title:'Delete this line',onclick:()=>delLine(l.id)},trash()))));
+  h('div',{class:'tx-t'},l.text,h('div',{class:'who'},meta(l)),whoRow(l)),h('button',{class:'icon noprint','aria-label':'Delete this line',title:'Delete this line',onclick:()=>delLine(l.id)},trash()))));
  if(interim)tx.append(h('div',{class:'int'},interim));tx.scrollTop=tx.scrollHeight;
  $('#chips').replaceChildren(...S.roster.map(s=>h('button',{class:'chip'+(active.includes(s.id)?' on':''),'aria-pressed':active.includes(s.id),onclick:()=>{active=active.includes(s.id)?active.filter(x=>x!==s.id):[...active,s.id];renderLive()}},nm(s))));
  $('#boxes').replaceChildren(...active.map(id=>{const ls=td.filter(l=>l.students.includes(id)).slice(-5);
@@ -302,17 +305,17 @@ const rest=t=>String(t||'').replace(/Student (\d+)/g,(m,n)=>{const id=Object.key
 function hide(t){const p=[];S.roster.forEach(s=>{const f=s.name.split(/\s+/)[0],dup=S.roster.filter(r=>r.name.split(/\s+/)[0].toLowerCase()===f.toLowerCase()).length>1;p.push([s.name.replace(/[.\s]+$/,''),lbl(s.id)]);if(!dup)p.push([f,lbl(s.id)])});
  p.sort((a,b)=>b[0].length-a[0].length).forEach(([k,c])=>t=t.replace(new RegExp('\\b'+esc(k)+'\\b','ig'),c));return t}
 const netMsg=e=>e.name==='AbortError'?'The sheet took too long to answer. Wait a minute and try again.':"Can't reach the web app. Open the URL in a browser tab: you should see {\"ok\":true}. If not, set Who has access to Anyone and deploy again.";
-async function api(action,extra){const c=new AbortController(),t=setTimeout(()=>c.abort(),45000);
+async function api(action,extra,ms){const c=new AbortController(),t=setTimeout(()=>c.abort(),ms||45000);
  try{const r=await fetch(S.sync.url,{method:'POST',body:JSON.stringify(Object.assign({action,key:S.sync.key},extra)),signal:c.signal});return await r.json()}finally{clearTimeout(t)}}
 const setSync=t=>{$('#sync').textContent=t;const m=$('#syncmsg');if(m)m.textContent=t};
 function queueSync(){if(syncing||!S.sync||!S.sync.url)return;clearTimeout(syncT);syncT=setTimeout(push,4000)}
-async function push(){if(!S.sync.url)return toast('Add the web app URL in Settings first.');if(!S.roster.length&&!S.lines.length){setSync('Nothing here to save yet. Use Load from sheet to bring in your notes.');return}setSync('Saving to sheet…');
- try{const r=await api('push',{state:{roster:S.roster,lines:S.lines,marks:S.marks,items:S.items,ai:Object.assign({},S.ai,{__codes:{codes:S.codes,n:S.n}})}});
+async function push(){if(!S.sync.url)return toast('Add the web app URL in Settings first.');if(!S.roster.length&&!S.lines.length&&!S.lessons.length){setSync('Nothing here to save yet. Use Load from sheet to bring in your notes.');return}setSync('Saving to sheet…');
+ try{const r=await api('push',{state:{roster:S.roster,lines:S.lines,marks:S.marks,items:S.items,lessons:S.lessons,ai:Object.assign({},S.ai,{__codes:{codes:S.codes,n:S.n}})}});
   setSync(r.error?'Sheet error: '+r.error:'Saved to sheet '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}))}catch(e){setSync(netMsg(e))}}
 async function pull(){if(!S.sync.url)return toast('Add the web app URL in Settings first.');setSync('Loading from sheet…');
  try{const r=await api('pull');if(r.error){setSync('Sheet error: '+r.error);return}const st=r.state,ai=st.ai||{};
   if(ai.__codes){S.codes=ai.__codes.codes||{};S.n=ai.__codes.n||0;delete ai.__codes}
-  syncing=true;Object.assign(S,{roster:st.roster,lines:st.lines,marks:st.marks,items:st.items,ai});migrateIds();normSubjects();save();syncing=false;active=[];selS=null;setSync('Loaded from sheet');render()}
+  syncing=true;Object.assign(S,{roster:st.roster,lines:st.lines,marks:st.marks,items:st.items,lessons:st.lessons||S.lessons,ai});migrateIds();normSubjects();save();syncing=false;active=[];selS=null;setSync('Loaded from sheet');render()}
  catch(e){syncing=false;setSync(netMsg(e))}}
 async function analyze(sid,d,sub,quiet){
  if(!S.aiOn||!S.sync.url)return;const k=sid+'|'+d+'|'+sub,ls=S.lines.filter(l=>l.date===d&&l.subject===sub&&l.students.includes(sid));if(!ls.length)return;
@@ -338,7 +341,7 @@ async function connect(url,key){S.sync={url:url.trim(),key:key.trim()};syncing=t
  setSync('Connecting… the first try can take 10 to 20 seconds.');
  try{const r=await api('ping');
   if(r.error&&r.error!=='Unknown action')return setSync(r.error==='Wrong passcode'?'Wrong passcode. Tick Show passcode and check it matches the PASSCODE property exactly.':'Sheet error: '+r.error);
-  if(!S.roster.length&&!S.lines.length){setSync('Connected. Loading your notes from the sheet…');await pull()}else{setSync('Connected. Saving notes to the sheet…');await push()}}catch(e){setSync(netMsg(e))}}
+  if(!S.roster.length&&!S.lines.length&&!S.lessons.length){setSync('Connected. Loading your notes from the sheet…');await pull()}else{setSync('Connected. Saving notes to the sheet…');await push()}}catch(e){setSync(netMsg(e))}}
 function syncCard(){const u=h('input',{placeholder:'Web app URL (ends in /exec)','aria-label':'Web app URL',value:S.sync.url}),k=h('input',{type:'password',placeholder:'Passcode you made up','aria-label':'Passcode',value:S.sync.key});
  return h('div',{class:'card'},h('h2',{},'Google Sheet and AI helper'),h('div',{class:'row',style:'flex-wrap:wrap'},u,k),
   h('label',{style:'display:block;margin:10px 0 0'},h('input',{type:'checkbox',onchange:e=>{k.type=e.target.checked?'text':'password'}}),' Show passcode'),
@@ -347,6 +350,89 @@ function syncCard(){const u=h('input',{placeholder:'Web app URL (ends in /exec)'
    h('button',{class:'btn',onclick:push},'Save to sheet now'),h('button',{class:'btn',onclick:()=>confirm('Replace the notes on this device with the sheet?')&&pull()},'Load from sheet')),
   h('p',{id:'syncmsg',class:'note',role:'status'},''),
   h('p',{class:'note'},'Only the web app URL and the passcode go here. The Gemini key stays in the Apps Script, never in this page.'))}
+/* ---------- remove a student from one comment ---------- */
+function whoRow(l){
+ if(!l.students.length)return h('div',{class:'who'},h('button',{class:'btn sm',onclick:()=>{l.students=[...active];save();renderLive()}},'Assign to selected students'));
+ const p=rmP&&rmP.id===l.id?rmP.sid:null;
+ return h('div',{class:'who'},'Filed under: ',
+  l.students.map(i=>h('button',{class:'chipx'+(p===i?' on':''),'aria-label':'Remove '+nm(stu(i))+' from this comment',title:'Tap to remove from this comment',onclick:()=>{rmP={id:l.id,sid:i};renderLive()}},nm(stu(i))+' ×')),
+  l.students.length>1&&!p?h('button',{class:'chipx',onclick:()=>rmStudent(l.id,null)},'Remove all'):null,
+  p?h('span',{class:'rmq'},' Remove '+nm(stu(p))+' from this comment? ',h('button',{class:'btn sm',onclick:()=>rmStudent(l.id,p)},'Yes'),h('button',{class:'btn sm',onclick:()=>{rmP=null;renderLive()}},'No'),
+   l.students.length>1?h('button',{class:'btn sm',onclick:()=>rmStudent(l.id,null)},'Remove all students'):null):null)}
+function rmStudent(id,sid){const l=S.lines.find(x=>x.id===id);if(!l)return;const snap=JSON.stringify(l),aiB=JSON.stringify(S.ai),ids=sid?[sid]:l.students.slice(),who=sid?nm(stu(sid)):'all students';
+ ids.forEach(x=>delete S.ai[x+'|'+l.date+'|'+l.subject]);
+ l.students=sid?l.students.filter(x=>x!==sid):[];if(!sid||l.sp===sid)delete l.sp;rmP=null;save();renderLive();
+ toast('Removed '+who+' from this comment.',()=>{const i=S.lines.findIndex(x=>x.id===id);if(i>=0)S.lines[i]=JSON.parse(snap);S.ai=JSON.parse(aiB);save();renderLive()})}
+
+/* ---------- lesson feedback ---------- */
+const COMMON=new Set(['will','mark','hope','grace','joy','rose','may','bill','art','dawn','faith','summer','sky','april','june','august','ivy','lily','daisy','amber','ruby','pearl','jade','page','chase','drew','rich','pat','jack','grant','miles','frank','guy','case','ray','gene','major','king','lane','sage','river','cash']);
+function scrub(t){const ps=[];S.roster.forEach(r=>{ps.push(r.name.replace(/[.\s]+$/,''));const f=r.name.split(/\s+/)[0];if(f.length>1)ps.push(f)});
+ ps.sort((a,b)=>b.length-a.length).forEach(k=>{
+  if(COMMON.has(k.toLowerCase()))[k,k[0].toUpperCase()+k.slice(1),k.toUpperCase()].filter((v,i,a)=>a.indexOf(v)===i).forEach(v=>{t=t.replace(new RegExp('\\b'+esc(v)+'\\b','g'),'[student]')});
+  else t=t.replace(new RegExp('\\b'+esc(k)+'\\b','gi'),'[student]')});return t}
+function addLessonText(t){const L=S.lessons.find(x=>x.id===lessonSel);if(!L)return;t=scrub(t).trim();if(!t)return;
+ const last=L.seg[L.seg.length-1],now=Date.now();if(last&&now-last.ts<=6000&&last.t.length<400){last.t+=' '+t;last.ts=now}else L.seg.push({t,ts:now});save();renderLesson()}
+function renderLesson(){if(view!=='lesson'||!lessonOn)return;const L=S.lessons.find(x=>x.id===lessonSel),b=$('#ltx');if(!L||!b)return;
+ b.replaceChildren(...L.seg.map((s,i)=>h('div',{class:'sg'},h('span',{class:'tag'},(i+1)+'. '),s.t)),...(interim?[h('div',{class:'int'},scrub(interim))]:[]));b.scrollTop=b.scrollHeight}
+function startLesson(){
+ if(!S.grade)return toast('Pick a grade at the top first, so the AI uses the right curriculum.');
+ if(!SR)return toast('Speech recognition needs Chrome or Edge.');
+ if(!listening){startMic();if(!listening)return;lessonMic=true}
+ capturing=false;const L={id:uid(),ts:Date.now(),date:day(),subject:S.subject,strand:S.strand||undefined,term:S.term,grade:S.grade,title:(($('#ltitle')||{}).value||'').trim(),seg:[],ai:null};
+ S.lessons.push(L);lessonSel=L.id;lessonOn=true;lHl=new Set();save();syncBar();render()}
+function lessonFinish(){if(!lessonOn)return;lessonOn=false;const L=S.lessons.find(x=>x.id===lessonSel);
+ if(L&&!L.seg.length){S.lessons=S.lessons.filter(x=>x!==L);lessonSel=null;save()}else if(L){save();if(S.aiOn&&S.sync.url)analyzeLesson(L.id)}
+ syncBar();if(view==='lesson')render()}
+function endLesson(){const m=lessonMic;lessonFinish();lessonMic=false;if(m)stopMic()}
+async function analyzeLesson(id){
+ const L=S.lessons.find(x=>x.id===id);if(!L||!L.seg.length)return;
+ if(!S.aiOn||!S.sync.url)return toast('Turn on the AI helper and connect your sheet in Settings first.');
+ if(!L.grade)return toast('Choose a grade first.');
+ toast('AI is reviewing the lesson. This can take up to a minute.');
+ const payload={task:'lesson',grade:L.grade,subject:L.subject,strand:L.strand||'',term:L.term,segments:L.seg.map((s,i)=>({n:i+1,text:scrub(s.t).slice(0,1200)}))};
+ try{const r=await api('analyze',{payload},120000);if(r.error)return toast('AI: '+r.error);
+  const a=r.result||{},arr=x=>Array.isArray(x)?x.map(String).slice(0,10):[],n=L.seg.length,
+   items=x=>Array.isArray(x)?x.slice(0,8).map(o=>typeof o==='string'?{text:o,segs:[]}:{text:String(o.text||o.topic||''),segs:(Array.isArray(o.segments)?o.segments:[]).map(Number).filter(k=>k>=1&&k<=n)}).filter(o=>o.text):[];
+  L.ai={summary_para:String(a.summary_paragraph||''),summary_dots:arr(a.summary_dots),covered:items(a.covered),strengths:items(a.strengths),next_lesson:items(a.next_lesson),next_time:items(a.next_time),feedback_para:String(a.feedback_paragraph||''),feedback_dots:arr(a.feedback_dots)};
+  save();if(view==='lesson')render();toast('Lesson feedback ready.')}catch(e){toast('Could not reach the AI helper.')}}
+function vLesson(m){
+ const L=S.lessons.find(x=>x.id===lessonSel);
+ m.append(h('div',{class:'card'},h('h2',{},'Lesson Feedback'),
+  h('p',{class:'note'},'Records speech as text only. No audio is saved. Names from your class list are replaced with [student], and nothing about students is sent to the AI.'),
+  h('p',{style:'font-weight:600'},[S.grade?'Grade '+S.grade:'Pick a grade at the top',S.subject,S.strand,S.term].filter(Boolean).join(' · ')),
+  h('div',{class:'row',style:'flex-wrap:wrap;align-items:center'},
+   lessonOn?h('button',{class:'btn rec',onclick:endLesson},'End lesson'):h('button',{class:'btn pri',onclick:startLesson},'Start lesson recording'),
+   lessonOn?null:h('input',{id:'ltitle',placeholder:'Lesson title (optional)','aria-label':'Lesson title'})),
+  lessonOn?h('div',{id:'ltx',class:'tx',style:'margin-top:12px'}):null));
+ if(lessonOn){renderLesson();return}
+ m.append(lessonList());if(L)m.append(lessonReview(L))}
+function lessonList(){
+ const ls=S.lessons.filter(l=>(!lf.sub||l.subject===lf.sub)&&(!lf.strand||l.strand===lf.strand)&&(!lf.term||l.term===lf.term)&&(!lf.grade||l.grade===lf.grade)&&(!lf.from||l.date>=lf.from)&&(!lf.to||l.date<=lf.to)).sort((a,b)=>b.date.localeCompare(a.date)||(b.ts||0)-(a.ts||0));
+ return h('div',{class:'card'},h('h2',{},'Saved lessons'),
+  h('div',{class:'row',style:'flex-wrap:wrap;align-items:center;margin-bottom:10px'},
+   osel('Subject',[['','All subjects']].concat(SUBJ.map(x=>[x,x])),lf.sub,v=>{lf.sub=v;lf.strand='';render()}),
+   osel('Strand',[['','All strands']].concat((CURR[lf.sub]||[]).map(x=>[x,x])),lf.strand,v=>{lf.strand=v;render()}),
+   osel('Period',[['','All periods']].concat(TERMS.map(x=>[x,x])),lf.term,v=>{lf.term=v;render()}),
+   osel('Grade',[['','All grades']].concat([1,2,3,4,5,6,7,8].map(g=>[String(g),'Grade '+g])),lf.grade,v=>{lf.grade=v;render()}),
+   h('label',{class:'note'},'From ',h('input',{type:'date',value:lf.from,onchange:e=>{lf.from=e.target.value;render()}})),
+   h('label',{class:'note'},'To ',h('input',{type:'date',value:lf.to,onchange:e=>{lf.to=e.target.value;render()}}))),
+  ls.length?ls.map(l=>h('button',{class:'it'+(l.id===lessonSel?' on':''),onclick:()=>{lessonSel=l.id;lHl=new Set();render()}},
+   fd(l.date)+' · '+(l.title?l.title+' · ':'')+l.subject+(l.strand?' · '+l.strand:'')+' · Grade '+l.grade+' · '+l.term,h('small',{},l.ai?'AI feedback':'No feedback yet'))):h('p',{class:'note'},'No lessons here yet. Start a lesson recording to add one.'))}
+function lessonReview(L){const a=L.ai,mode=S.lmode||'dots';
+ const hl=segs=>{lHl=new Set(segs);document.querySelectorAll('.sg').forEach(e=>e.classList.toggle('hl',lHl.has(+e.dataset.n)));const e=segs.length&&$('#seg'+segs[0]);if(e&&e.scrollIntoView)e.scrollIntoView({block:'center',behavior:'smooth'})};
+ const fb=(title,items)=>items&&items.length?h('div',{},h('h3',{},title),items.map(o=>h('button',{class:'fb',onclick:()=>hl(o.segs)},o.text,h('span',{class:'tag'},o.segs.length?'  · tap to see where it was said':'  · no matching moment')))):null;
+ const bul=x=>h('ul',{},(x||[]).map(t=>h('li',{},t)));
+ return h('div',{class:'grid'},
+  h('div',{class:'card'},h('h2',{},'Transcript'),h('div',{class:'tx',style:'max-height:70vh'},L.seg.map((x,i)=>h('div',{class:'sg'+(lHl.has(i+1)?' hl':''),id:'seg'+(i+1),dataset:{n:i+1}},h('span',{class:'tag'},(i+1)+'. '),x.t)))),
+  h('div',{class:'card'},h('h2',{},(L.title||L.subject)+' · '+fd(L.date)),h('p',{class:'note'},['Grade '+L.grade,L.subject,L.strand,L.term].filter(Boolean).join(' · ')),
+   h('div',{class:'row',style:'flex-wrap:wrap;align-items:center'},
+    h('div',{class:'seg'},[['dots','Dot jots'],['para','Paragraph']].map(([k,l])=>h('button',{class:mode===k?'on':'',onclick:()=>{S.lmode=k;save();render()}},l))),
+    S.aiOn&&S.sync.url?h('button',{class:'btn pri',onclick:()=>analyzeLesson(L.id)},a?'Re-run AI feedback':'Run AI feedback'):null,
+    h('button',{class:'btn',style:'color:var(--rec)',onclick:()=>{if(confirm('Delete this lesson and its feedback?')){S.lessons=S.lessons.filter(x=>x.id!==L.id);lessonSel=null;save();render()}}},'Delete')),
+   a?[h('div',{class:'ai'},h('h3',{},'Lesson summary'),mode==='dots'?bul(a.summary_dots):h('p',{},a.summary_para)),
+    fb('What the AI heard you cover',a.covered),fb('Strengths',a.strengths),fb('Next steps for the next lesson',a.next_lesson),fb('For the next time this lesson is taught',a.next_time),
+    h('div',{class:'ai'},h('h3',{},'Overall feedback'),mode==='dots'?bul(a.feedback_dots):h('p',{},a.feedback_para))]
+   :h('p',{class:'note',style:'margin-top:12px'},'No AI feedback yet. Turn on the AI helper and connect your sheet in Settings, then press Run AI feedback.')))}
 /* ---------- select, combine, attribute ---------- */
 function renderBulk(){const b=$('#bulk');if(!b)return;
  const td=S.lines.filter(l=>l.date===day());[...checked].forEach(id=>{if(!td.some(l=>l.id===id))checked.delete(id)});
@@ -405,7 +491,7 @@ const newYearDue=()=>S.idYear&&S.roster.length&&String(schoolYear()).slice(2)!==
 function startNewYear(){const y=schoolYear();
  if(!confirm('Start the '+yearLabel(y)+' school year?\n\nThis downloads a copy of this year\'s notes, then clears all students and notes from this device and restarts student numbers at 001.\n\nIt also disconnects from the current Google Sheet so last year\'s sheet is not changed. Tip: in Google Sheets, use File > Make a copy to keep it.'))return;
  exportCsv();
- const keep={aiOn:S.aiOn,subject:S.subject,mode:S.mode,hide:S.hide};
+ const keep={aiOn:S.aiOn,subject:S.subject,mode:S.mode,hide:S.hide,lessons:S.lessons,lmode:S.lmode};
  S=Object.assign(fresh(),keep);active=[];selS=null;save();setSync('');view='settings';render();
  toast('New year started. Add your class list, then connect a new sheet.')}
 const yearBanner=()=>h('div',{class:'card noprint',style:'border-left:5px solid var(--s)'},
