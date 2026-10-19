@@ -74,10 +74,20 @@ header select{background:#22333F;border:1px solid #3A4E5C;color:#fff;border-radi
 <div id="toast"></div>
 <script>
 const KEY='anecdotal-v1',$=s=>document.querySelector(s);
-const fresh=()=>({roster:[],lines:[],marks:{},items:{},ai:{},joinSec:8,grade:'',lmode:'dots',lessons:[],idYear:null,idLast:0,codes:{},n:0,sync:{url:'',key:''},aiOn:true,subject:'Language',strand:'',term:'',mode:'dots',hide:false});
+const fresh=()=>({roster:[],lines:[],marks:{},items:{},ai:{},tomb:{},joinSec:8,grade:'',lmode:'dots',lessons:[],idYear:null,idLast:0,codes:{},n:0,sync:{url:'',key:''},aiOn:true,subject:'Language',strand:'',term:'',mode:'dots',hide:false});
 let syncT,syncing=false;
 let S;try{S=Object.assign(fresh(),JSON.parse(localStorage.getItem(KEY)))}catch(e){S=fresh()}
-const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){toast('Could not save on this device.')}queueSync()};
+const persist=()=>{try{stamp();localStorage.setItem(KEY,JSON.stringify(S))}catch(e){toast('Could not save on this device.')}};
+const save=()=>{persist();queueSync()};
+/* change tracking: every record gets an update time (u) when it changes, and a tombstone when it is deleted, so devices can merge */
+const hsh=t=>{let x=5381;for(let i=0;i<t.length;i++)x=((x<<5)+x+t.charCodeAt(i))|0;return x.toString(36)};
+const recHash=r=>hsh(JSON.stringify(r,(k,v)=>k==='u'?undefined:v));
+function eachRec(fn){S.roster.forEach(r=>fn('st:'+r.id,r));S.lines.forEach(r=>fn('ln:'+r.id,r));S.lessons.forEach(r=>fn('ls:'+r.id,r));
+ for(const sid in S.items)S.items[sid].forEach(r=>fn('it:'+r.id,r));for(const k in S.marks)if(S.marks[k])fn('mk:'+k,S.marks[k]);for(const k in S.ai)if(S.ai[k]&&typeof S.ai[k]==='object')fn('ai:'+k,S.ai[k])}
+function stamp(){const now=Date.now();S.tomb=S.tomb||{};
+ if(!S.h){S.h={};eachRec((t,r)=>{S.h[t]=recHash(r)});return}
+ const seen={};eachRec((t,r)=>{seen[t]=1;const x=recHash(r);if(S.h[t]!==x){S.h[t]=x;r.u=now}if(S.tomb[t])delete S.tomb[t]});
+ for(const t in S.h)if(!seen[t]){S.tomb[t]=now;delete S.h[t]}}
 function h(t,p,...k){const e=document.createElement(t);for(const[a,v]of Object.entries(p||{})){if(v==null||v===false)continue;if(a==='class')e.className=v;else if(a.startsWith('on'))e.addEventListener(a.slice(2),v);else if(a==='dataset')Object.assign(e.dataset,v);else e.setAttribute(a,v)}for(const c of k.flat())if(c!=null&&c!==false)e.append(c.nodeType?c:document.createTextNode(c));return e}
 const sv=(t,p,...k)=>{const e=document.createElementNS('http://www.w3.org/2000/svg',t);for(const[a,v]of Object.entries(p||{}))e.setAttribute(a,v);k.forEach(c=>e.append(c));return e};
 const uid=()=>Math.random().toString(36).slice(2,9),day=()=>new Date().toLocaleDateString('en-CA');
@@ -294,29 +304,66 @@ function vSettings(m){
   h('p',{},'Chrome and Edge send microphone audio to their own speech service to turn it into text. Ask your school or district whether that is allowed before using real student names.'),
   h('label',{},h('input',{type:'checkbox',checked:S.hide?'':null,onchange:e=>{S.hide=e.target.checked;save();render()}}),' Show initials instead of names on screen'),
   h('div',{class:'row',style:'margin-top:14px;flex-wrap:wrap'},h('button',{class:'btn',onclick:exportCsv},'Export notes (CSV)'),
-   h('button',{class:'btn',style:'color:var(--rec)',onclick:()=>{if(confirm('Delete all students, notes and marks from this device? This cannot be undone.')){S=fresh();save();active=[];selS=null;render()}}},'Delete all data'))))}
+   h('button',{class:'btn',style:'color:var(--rec)',onclick:()=>{if(confirm('Delete all students, notes, marks and lessons? If your sheet is connected, they are removed from the sheet and your other devices too. This cannot be undone.')){const t={};eachRec(id=>{t[id]=Date.now()});S=Object.assign(fresh(),{sync:S.sync,aiOn:S.aiOn,tomb:Object.assign({},S.tomb,t)});save();active=[];selS=null;render()}}},'Delete all data'))))}
 const stu2=n=>S.roster.find(r=>r.name===n);
 function exportCsv(){const q=v=>{v=String(v);if(/^[=+\-@]/.test(v))v="'"+v;return '"'+v.replace(/"/g,'""')+'"'},rows=[['date','subject','student','speaker','text','period','strand']];
  S.lines.forEach(l=>(l.students.length?l.students:['']).forEach(id=>rows.push([l.date,l.subject,id?nm(stu(id)):'(unassigned)',l.who==='T'?'Teacher':(l.sp&&stu(l.sp)?'Student: '+stu(l.sp).name:'Student'),l.text,l.term||'',l.strand||''])));
  h('a',{href:URL.createObjectURL(new Blob([rows.map(r=>r.map(q).join(',')).join('\n')],{type:'text/csv'})),download:'anecdotal-notes.csv'}).click()}
 /* ---------- sheet + AI ---------- */
-const lbl=id=>'Student '+(S.codes[id]||(S.codes[id]=++S.n));
-const rest=t=>String(t||'').replace(/Student (\d+)/g,(m,n)=>{const id=Object.keys(S.codes).find(i=>S.codes[i]==n);return id&&stu(id)?nm(stu(id)):m});
+const lbl=id=>'Student '+(parseInt(String(id).slice(-3),10)||0);
+const rest=t=>String(t||'').replace(/Student (\d+)/g,(m,n)=>{const r=S.roster.find(x=>parseInt(String(x.id).slice(-3),10)===+n);return r?nm(r):m});
 function hide(t){const p=[];S.roster.forEach(s=>{const f=s.name.split(/\s+/)[0],dup=S.roster.filter(r=>r.name.split(/\s+/)[0].toLowerCase()===f.toLowerCase()).length>1;p.push([s.name.replace(/[.\s]+$/,''),lbl(s.id)]);if(!dup)p.push([f,lbl(s.id)])});
  p.sort((a,b)=>b[0].length-a[0].length).forEach(([k,c])=>t=t.replace(new RegExp('\\b'+esc(k)+'\\b','ig'),c));return t}
 const netMsg=e=>e.name==='AbortError'?'The sheet took too long to answer. Wait a minute and try again.':"Can't reach the web app. Open the URL in a browser tab: you should see {\"ok\":true}. If not, set Who has access to Anyone and deploy again.";
 async function api(action,extra,ms){const c=new AbortController(),t=setTimeout(()=>c.abort(),ms||45000);
  try{const r=await fetch(S.sync.url,{method:'POST',body:JSON.stringify(Object.assign({action,key:S.sync.key},extra)),signal:c.signal});return await r.json()}finally{clearTimeout(t)}}
 const setSync=t=>{$('#sync').textContent=t;const m=$('#syncmsg');if(m)m.textContent=t};
-function queueSync(){if(syncing||!S.sync||!S.sync.url)return;clearTimeout(syncT);syncT=setTimeout(push,4000)}
-async function push(){if(!S.sync.url)return toast('Add the web app URL in Settings first.');if(!S.roster.length&&!S.lines.length&&!S.lessons.length){setSync('Nothing here to save yet. Use Load from sheet to bring in your notes.');return}setSync('Saving to sheet…');
- try{const r=await api('push',{state:{roster:S.roster,lines:S.lines,marks:S.marks,items:S.items,lessons:S.lessons,ai:Object.assign({},S.ai,{__codes:{codes:S.codes,n:S.n}})}});
-  setSync(r.error?'Sheet error: '+r.error:'Saved to sheet '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}))}catch(e){setSync(netMsg(e))}}
-async function pull(){if(!S.sync.url)return toast('Add the web app URL in Settings first.');setSync('Loading from sheet…');
- try{const r=await api('pull');if(r.error){setSync('Sheet error: '+r.error);return}const st=r.state,ai=st.ai||{};
-  if(ai.__codes){S.codes=ai.__codes.codes||{};S.n=ai.__codes.n||0;delete ai.__codes}
-  syncing=true;Object.assign(S,{roster:st.roster,lines:st.lines,marks:st.marks,items:st.items,lessons:st.lessons||S.lessons,ai});migrateIds();normSubjects();save();syncing=false;active=[];selS=null;setSync('Loaded from sheet');render()}
- catch(e){syncing=false;setSync(netMsg(e))}}
+let syncBusy=false,syncAgain=false,lastRev=null;
+const clock=()=>new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+function queueSync(){if(syncing||!S.sync||!S.sync.url)return;if(syncBusy){syncAgain=true;return}clearTimeout(syncT);syncT=setTimeout(syncNow,4000)}
+const wire=()=>({roster:S.roster,lines:S.lines,lessons:S.lessons,items:S.items,marks:S.marks,ai:S.ai,tomb:S.tomb,idYear:S.idYear,idLast:S.idLast});
+function flat(s){const m={};(s.roster||[]).forEach(r=>m['st:'+r.id]={k:'st',rec:r});(s.lines||[]).forEach(r=>m['ln:'+r.id]={k:'ln',rec:r});(s.lessons||[]).forEach(r=>m['ls:'+r.id]={k:'ls',rec:r});
+ for(const sid in s.items||{})(s.items[sid]||[]).forEach(r=>m['it:'+r.id]={k:'it',sid,rec:r});
+ for(const k in s.marks||{})m['mk:'+k]={k:'mk',key:k,rec:s.marks[k]};for(const k in s.ai||{})m['ai:'+k]={k:'ai',key:k,rec:s.ai[k]};return m}
+function place(o,p){const r=p.rec;if(p.k==='st')o.roster.push(r);else if(p.k==='ln')o.lines.push(r);else if(p.k==='ls')o.lessons.push(r);
+ else if(p.k==='it')(o.items[p.sid]=o.items[p.sid]||[]).push(r);else if(p.k==='mk')o.marks[p.key]=r;else o.ai[p.key]=r}
+/* merge two copies record by record: the most recently changed copy wins; a deletion beats an older copy */
+function mergeState(L,R){const a=flat(L),b=flat(R),tomb={},o={roster:[],lines:[],lessons:[],items:{},marks:{},ai:{}};let need=false,remote=false;
+ const lt=L.tomb||{},rt=R.tomb||{},cut=Date.now()-180*864e5,U=r=>r.u||0;
+ new Set([...Object.keys(lt),...Object.keys(rt)]).forEach(t=>{const u=Math.max(lt[t]||0,rt[t]||0);if(u>cut){tomb[t]=u;if((rt[t]||0)<u)need=true}});
+ new Set([...Object.keys(a),...Object.keys(b)]).forEach(t=>{const x=a[t],y=b[t],p=!y?x:!x?y:(U(x.rec)>U(y.rec)?x:y);
+  if(tomb[t]&&tomb[t]>=U(p.rec)){if(y)need=true;if(x)remote=true;return}
+  if(p===x){if(!y||U(x.rec)>U(y.rec))need=true}else if(!x||JSON.stringify(x.rec)!==JSON.stringify(y.rec))remote=true;
+  place(o,p)});
+ o.roster.sort((p,q)=>String(p.id).localeCompare(String(q.id)));o.lines.sort((p,q)=>(p.ts||0)-(q.ts||0));
+ o.idLast=Math.max(L.idLast||0,R.idLast||0);if((R.idLast||0)<o.idLast)need=true;o.idYear=L.idYear||R.idYear||null;if(!R.idYear&&o.idYear)need=true;
+ o.tomb=tomb;o.needPush=need;o.remoteNew=remote;return o}
+function applyMerged(m){S.roster=m.roster;S.lines=m.lines;S.lessons=m.lessons;S.items=m.items;S.marks=m.marks;S.ai=m.ai;S.tomb=m.tomb;S.idLast=m.idLast;S.idYear=m.idYear;
+ normSubjects();S.h={};eachRec((t,r)=>{S.h[t]=recHash(r)});try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}
+ if(m.remoteNew&&!lessonOn&&!lEdit){if(view==='live')renderLive();else if(view!=='settings')render()}}
+async function syncNow(){
+ if(!S.sync||!S.sync.url)return;if(syncBusy){syncAgain=true;return}
+ syncBusy=true;setSync('Syncing…');
+ try{for(let i=0;i<3;i++){
+   const r=await api('pull');
+   if(r.error){setSync(r.error==='Wrong passcode'?'Wrong passcode. Check it in Settings.':'Sheet error: '+r.error);return}
+   const m=mergeState(wire(),r.state||{});applyMerged(m);lastRev=r.rev;
+   if(!m.needPush){setSync('Up to date '+clock());return}
+   const w=await api('push',{state:wire(),baseRev:r.rev});
+   if(w.conflict)continue;
+   if(w.error){setSync('Sheet error: '+w.error);return}
+   lastRev=w.rev;setSync('Synced '+clock());return}
+  setSync('The other device was saving. Trying again shortly.');syncAgain=true}
+ catch(e){setSync(netMsg(e))}
+ finally{syncBusy=false;if(syncAgain){syncAgain=false;queueSync()}}}
+async function loadReplace(){if(!S.sync.url)return toast('Add the web app URL in Settings first.');setSync('Loading…');
+ try{const r=await api('pull');if(r.error){setSync('Sheet error: '+r.error);return}const st=r.state||{};
+  applyMerged({roster:st.roster||[],lines:st.lines||[],lessons:st.lessons||[],items:st.items||{},marks:st.marks||{},ai:st.ai||{},tomb:st.tomb||{},idLast:st.idLast||0,idYear:st.idYear||null,remoteNew:false});
+  lastRev=r.rev;setSync('Loaded from sheet '+clock());render()}catch(e){setSync(netMsg(e))}}
+async function forcePush(){if(!S.sync.url)return toast('Add the web app URL in Settings first.');setSync('Saving…');
+ try{const w=await api('push',{state:wire(),force:true});setSync(w.error?'Sheet error: '+w.error:'Sheet replaced '+clock());if(w.rev)lastRev=w.rev}catch(e){setSync(netMsg(e))}}
+function migrateCodes(){const c=S.codes||{};if(!Object.keys(c).length)return false;const inv={};for(const id in c)inv[c[id]]=parseInt(String(id).slice(-3),10)||0;
+ const f=t=>t.replace(/Student (\d+)/g,(m,n)=>inv[n]!=null?'Student '+inv[n]:m);for(const k in S.ai)if(k!=='__codes')S.ai[k]=JSON.parse(f(JSON.stringify(S.ai[k])));S.codes={};S.n=0;return true}
 async function analyze(sid,d,sub,quiet){
  if(!S.aiOn||!S.sync.url)return;const k=sid+'|'+d+'|'+sub,ls=S.lines.filter(l=>l.date===d&&l.subject===sub&&l.students.includes(sid));if(!ls.length)return;
  if(!quiet)toast('AI is reading the notes…');
@@ -342,15 +389,15 @@ async function connect(url,key){S.sync={url:url.trim(),key:key.trim()};syncing=t
  setSync('Connecting… the first try can take 10 to 20 seconds.');
  try{const r=await api('ping');
   if(r.error&&r.error!=='Unknown action')return setSync(r.error==='Wrong passcode'?'Wrong passcode. Tick Show passcode and check it matches the PASSCODE property exactly.':'Sheet error: '+r.error);
-  if(!S.roster.length&&!S.lines.length&&!S.lessons.length){setSync('Connected. Loading your notes from the sheet…');await pull()}else{setSync('Connected. Saving notes to the sheet…');await push()}}catch(e){setSync(netMsg(e))}}
+  setSync('Connected. Syncing…');await syncNow()}catch(e){setSync(netMsg(e))}}
 function syncCard(){const u=h('input',{placeholder:'Web app URL (ends in /exec)','aria-label':'Web app URL',value:S.sync.url}),k=h('input',{type:'password',placeholder:'Passcode you made up','aria-label':'Passcode',value:S.sync.key});
  return h('div',{class:'card'},h('h2',{},'Google Sheet and AI helper'),h('div',{class:'row',style:'flex-wrap:wrap'},u,k),
   h('label',{style:'display:block;margin:10px 0 0'},h('input',{type:'checkbox',onchange:e=>{k.type=e.target.checked?'text':'password'}}),' Show passcode'),
   h('label',{style:'display:block;margin:6px 0 10px'},h('input',{type:'checkbox',checked:S.aiOn?'':null,onchange:e=>{S.aiOn=e.target.checked;save()}}),' AI helper: sort notes into marks and comments'),
   h('div',{class:'row',style:'flex-wrap:wrap'},h('button',{class:'btn pri',onclick:()=>connect(u.value,k.value)},'Save and connect'),
-   h('button',{class:'btn',onclick:push},'Save to sheet now'),h('button',{class:'btn',onclick:()=>confirm('Replace the notes on this device with the sheet?')&&pull()},'Load from sheet')),
+   h('button',{class:'btn',onclick:syncNow},'Sync now'),h('button',{class:'btn',onclick:()=>confirm('Replace everything on this device with what is in the sheet?')&&loadReplace()},'Replace this device with the sheet'),h('button',{class:'btn',onclick:()=>confirm('Replace everything in the sheet with what is on this device? Use this only if the sheet has the wrong data.')&&forcePush()},'Replace the sheet with this device')),
   h('p',{id:'syncmsg',class:'note',role:'status'},''),
-  h('p',{class:'note'},'Only the web app URL and the passcode go here. The Gemini key stays in the Apps Script, never in this page.'))}
+  h('p',{class:'note'},'Only the web app URL and the passcode go here. The Gemini key stays in the Apps Script, never in this page. Phones and computers stay in step automatically: each device merges its changes with the sheet a few seconds after you make them, and again about every 30 seconds and whenever you return to the app. Please don\'t edit the app\'s tabs by hand in the sheet.'))}
 /* ---------- remove a student from one comment ---------- */
 function whoRow(l){
  if(!l.students.length)return h('div',{class:'who'},h('button',{class:'btn sm',onclick:()=>{l.students=[...active];save();renderLive()}},'Assign to selected students'));
@@ -523,6 +570,9 @@ function yearCard(){const yy=S.idYear||String(schoolYear()).slice(2),next='STU-'
   h('p',{},'Student numbers for this class look like STU-'+yy+'-001. The next new student gets '+next+'.'),
   h('button',{class:'btn',onclick:startNewYear},'Start new school year'),
   h('p',{class:'note'},'Downloads a copy of this year\'s notes, clears the app, and restarts numbering at 001. It does not touch your Google Sheet.'))}
-{const a=migrateIds(),b=normSubjects();if(a||b)save()}
+{const a=migrateIds(),b=normSubjects(),c=migrateCodes();delete S.ai.__codes;persist();if(a||b||c)queueSync()}
 render();
+if(S.sync&&S.sync.url)syncNow();
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&S.sync&&S.sync.url)syncNow()});
+setInterval(async()=>{if(document.hidden||syncBusy||!S.sync||!S.sync.url)return;try{const r=await api('rev');if(r&&r.rev!==undefined&&r.rev!==lastRev)syncNow()}catch(e){}},30000);
 </script></body></html>
