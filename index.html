@@ -119,7 +119,7 @@ function buildCtx(){normSubjects();if(!CURR[S.subject])S.subject='Other';if(S.st
 const meta=l=>[l.subject,l.strand,l.term].filter(Boolean).join(' · ');
 const grpMeta=ls=>[ls[0].term,[...new Set(ls.map(l=>l.strand).filter(Boolean))].join(', ')].filter(Boolean).join(' · ');
 const termOf=(sid,d,sub)=>{const l=S.lines.find(x=>x.date===d&&x.subject===sub&&x.students.includes(sid)&&x.term);return l?l.term:S.term};
-let view='live',selS=null,active=[],capturing=false,listening=false,rec=null,interim='',selIds=[],mapRange=0,pTerm='',fTerm='',fSub='',checked=new Set(),bulkTo=new Set(),rmP=null,lessonOn=false,lessonMic=false,lessonSel=null,lHl=new Set(),lf={sub:'',strand:'',term:'',grade:'',from:'',to:''};
+let view='live',selS=null,active=[],capturing=false,listening=false,rec=null,interim='',selIds=[],mapRange=0,pTerm='',fTerm='',fSub='',checked=new Set(),bulkTo=new Set(),rmP=null,lEdit=null,lessonOn=false,lessonMic=false,lessonSel=null,lHl=new Set(),lf={sub:'',strand:'',term:'',grade:'',from:'',to:''};
 
 /* ---------- listening ---------- */
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -324,7 +324,7 @@ async function analyze(sid,d,sub,quiet){
  try{const r=await api('analyze',{payload});if(r.error)return toast('AI: '+r.error);const a=r.result||{},arr=x=>Array.isArray(x)?x.map(String).slice(0,6):[],mk={};
   CATS.forEach(([c])=>mk[c]=Math.max(0,Math.min(4,Math.round(+(a.marks||{})[c]||0))));
   (a.speakers||[]).forEach((w,i)=>{if(ls[i]&&!ls[i].manual&&(w==='T'||w==='S')){ls[i].who=w;if(w==='T')delete ls[i].sp}});
-  S.ai[k]={marks:mk,learned:arr(a.learned),strengths:arr(a.strengths),growth:arr(a.growth),next_steps:arr(a.next_steps),dots:arr(a.dots),full:String(a.full||''),n:ls.length,used:[]};
+  S.ai[k]={marks:mk,learned:arr(a.learned),strengths:arr(a.strengths),growth:arr(a.growth),next_steps:arr(a.next_steps),dots:arr(a.dots),full:String(a.full||''),why:(()=>{const w={};CATS.forEach(([c])=>{const v=(a.marks_why||{})[c];if(v)w[c]=String(v).slice(0,300)});return Object.keys(w).length?w:undefined})(),n:ls.length,used:[]};
   save();view==='live'?renderLive():view==='students'&&render()}catch(e){toast('Could not reach the AI helper.')}}
 async function autoAnalyze(){if(!S.aiOn||!S.sync||!S.sync.url)return;
  for(const s of S.roster){const ls=S.lines.filter(l=>l.date===day()&&l.subject===S.subject&&l.students.includes(s.id)),a=S.ai[s.id+'|'+day()+'|'+S.subject];
@@ -332,6 +332,7 @@ async function autoAnalyze(){if(!S.aiOn||!S.sync||!S.sync.url)return;
 function aiPanel(sid,d,sub){const a=S.ai[sid+'|'+d+'|'+sub];if(!a)return null;a.used=a.used||[];
  const rows=[];[['learned','L','Learned'],['strengths','S','Strength'],['growth','G','Growth'],['next_steps','N','Next step']].forEach(([f,t,lab])=>(a[f]||[]).forEach(x=>{if(!a.used.includes(x))rows.push({t,lab,x})}));
  return h('div',{class:'ai'},h('h3',{},'AI summary'),S.mode==='dots'?h('ul',{},(a.dots||[]).map(x=>h('li',{},rest(x)))):h('p',{},rest(a.full)),
+  a.why?h('h3',{},'Why these marks'):null,a.why?CATS.map(([c,lab])=>a.why[c]?h('div',{class:'item'},h('span',{},h('span',{class:'tag'},lab+' · AI suggested '+(a.marks?a.marks[c]:'?')+'/4: '),rest(a.why[c]))):null):null,
   rows.length?h('h3',{},'Suggested comments'):null,
   rows.map(r=>h('div',{class:'item'},h('span',{},h('span',{class:'tag'},r.lab+': '),rest(r.x)),h('button',{class:'btn sm',onclick:()=>{a.used.push(r.x);addItem(sid,r.t,rest(r.x),sub,termOf(sid,d,sub))}},'Add'))),
   rows.length>1?h('button',{class:'btn sm',style:'margin-top:8px',onclick:()=>{rows.forEach(r=>{a.used.push(r.x);(S.items[sid]=S.items[sid]||[]).push({id:uid(),type:r.t,text:rest(r.x),subject:sub,term:termOf(sid,d,sub)})});save();render()}},'Add all'):null)}
@@ -418,18 +419,36 @@ function lessonList(){
    h('label',{class:'note'},'To ',h('input',{type:'date',value:lf.to,onchange:e=>{lf.to=e.target.value;render()}}))),
   ls.length?ls.map(l=>h('button',{class:'it'+(l.id===lessonSel?' on':''),onclick:()=>{lessonSel=l.id;lHl=new Set();render()}},
    fd(l.date)+' · '+(l.title?l.title+' · ':'')+l.subject+(l.strand?' · '+l.strand:'')+' · Grade '+l.grade+' · '+l.term,h('small',{},l.ai?'AI feedback':'No feedback yet'))):h('p',{class:'note'},'No lessons here yet. Start a lesson recording to add one.'))}
+function remapSegs(L,f){if(!L.ai)return;['covered','strengths','next_lesson','next_time'].forEach(k=>(L.ai[k]||[]).forEach(o=>{o.segs=o.segs.map(f).filter(n=>n!=null)}))}
+function delSeg(L,i){L.seg.splice(i,1);remapSegs(L,n=>n===i+1?null:(n>i+1?n-1:n))}
+function addSeg(L,i,v){v=scrub(v).trim();if(!v)return;L.seg.splice(i+1,0,{t:v,ts:Date.now()});remapSegs(L,n=>n>=i+2?n+1:n)}
+function lessonEdit(L,fn){fn();if(L.ai)L.ai.stale=true;lEdit=null;lHl=new Set();save();render()}
+const addBox=(L,i)=>h('div',{class:'sg'},h('textarea',{id:'segta','aria-label':'Text to add',placeholder:'Type what you said. Names from your class list are replaced with [student].',style:'min-height:80px'}),
+ h('div',{class:'row',style:'margin-top:6px'},h('button',{class:'btn sm pri',onclick:()=>lessonEdit(L,()=>addSeg(L,i,$('#segta').value))},'Add'),h('button',{class:'btn sm',onclick:()=>{lEdit=null;render()}},'Cancel')));
+function segRow(L,i){const x=L.seg[i],mine=lEdit&&lEdit.id===L.id&&lEdit.i===i?lEdit.mode:null;
+ if(mine==='edit')return h('div',{class:'sg'},h('textarea',{id:'segta','aria-label':'Edit transcript text',style:'min-height:80px'},x.t),
+  h('div',{class:'row',style:'margin-top:6px'},h('button',{class:'btn sm pri',onclick:()=>{const v=scrub($('#segta').value).trim();lessonEdit(L,()=>{if(v)L.seg[i].t=v;else delSeg(L,i)})}},'Save'),h('button',{class:'btn sm',onclick:()=>{lEdit=null;render()}},'Cancel')));
+ return h('div',{},h('div',{class:'sg'+(lHl.has(i+1)?' hl':''),id:'seg'+(i+1),dataset:{n:i+1}},h('span',{class:'tag'},(i+1)+'. '),x.t,
+   h('span',{class:'noprint',style:'white-space:nowrap'},' ',
+    h('button',{class:'icon',title:'Fix the words in this part','aria-label':'Edit part '+(i+1),onclick:()=>{lEdit={id:L.id,i,mode:'edit'};render()}},pencil()),
+    h('button',{class:'icon',title:'Add something that was missed after this part','aria-label':'Add text after part '+(i+1),onclick:()=>{lEdit={id:L.id,i,mode:'add'};render()}},plus()),
+    h('button',{class:'icon',title:'Delete this part','aria-label':'Delete part '+(i+1),onclick:()=>{if(confirm('Delete this part of the transcript?'))lessonEdit(L,()=>delSeg(L,i))}},trash()))),
+  mine==='add'?addBox(L,i):null)}
 function lessonReview(L){const a=L.ai,mode=S.lmode||'dots';
  const hl=segs=>{lHl=new Set(segs);document.querySelectorAll('.sg').forEach(e=>e.classList.toggle('hl',lHl.has(+e.dataset.n)));const e=segs.length&&$('#seg'+segs[0]);if(e&&e.scrollIntoView)e.scrollIntoView({block:'center',behavior:'smooth'})};
  const fb=(title,items)=>items&&items.length?h('div',{},h('h3',{},title),items.map(o=>h('button',{class:'fb',onclick:()=>hl(o.segs)},o.text,h('span',{class:'tag'},o.segs.length?'  · tap to see where it was said':'  · no matching moment')))):null;
  const bul=x=>h('ul',{},(x||[]).map(t=>h('li',{},t)));
  return h('div',{class:'grid'},
-  h('div',{class:'card'},h('h2',{},'Transcript'),h('div',{class:'tx',style:'max-height:70vh'},L.seg.map((x,i)=>h('div',{class:'sg'+(lHl.has(i+1)?' hl':''),id:'seg'+(i+1),dataset:{n:i+1}},h('span',{class:'tag'},(i+1)+'. '),x.t)))),
+  h('div',{class:'card'},h('h2',{},'Transcript'),
+   h('div',{class:'row noprint',style:'margin-bottom:6px;flex-wrap:wrap'},h('button',{class:'btn sm',onclick:()=>{lEdit={id:L.id,i:-1,mode:'add'};render()}},'+ Add text at start'),h('button',{class:'btn sm',onclick:()=>{lEdit={id:L.id,i:L.seg.length-1,mode:'add'};render()}},'+ Add text at end')),
+   h('p',{class:'note'},'Use the pencil to fix words, the + to add something that wasn’t recorded, and the trash can to remove a part.'),
+   h('div',{class:'tx',style:'max-height:70vh'},lEdit&&lEdit.id===L.id&&lEdit.mode==='add'&&lEdit.i===-1?addBox(L,-1):null,L.seg.map((x,i)=>segRow(L,i)))),
   h('div',{class:'card'},h('h2',{},(L.title||L.subject)+' · '+fd(L.date)),h('p',{class:'note'},['Grade '+L.grade,L.subject,L.strand,L.term].filter(Boolean).join(' · ')),
    h('div',{class:'row',style:'flex-wrap:wrap;align-items:center'},
     h('div',{class:'seg'},[['dots','Dot jots'],['para','Paragraph']].map(([k,l])=>h('button',{class:mode===k?'on':'',onclick:()=>{S.lmode=k;save();render()}},l))),
     S.aiOn&&S.sync.url?h('button',{class:'btn pri',onclick:()=>analyzeLesson(L.id)},a?'Re-run AI feedback':'Run AI feedback'):null,
     h('button',{class:'btn',style:'color:var(--rec)',onclick:()=>{if(confirm('Delete this lesson and its feedback?')){S.lessons=S.lessons.filter(x=>x.id!==L.id);lessonSel=null;save();render()}}},'Delete')),
-   a?[h('div',{class:'ai'},h('h3',{},'Lesson summary'),mode==='dots'?bul(a.summary_dots):h('p',{},a.summary_para)),
+   a?[a.stale?h('p',{class:'note',style:'color:var(--rec)'},'The transcript was edited after this feedback was written. Run AI feedback again to update it.'):null,h('div',{class:'ai'},h('h3',{},'Lesson summary'),mode==='dots'?bul(a.summary_dots):h('p',{},a.summary_para)),
     fb('What the AI heard you cover',a.covered),fb('Strengths',a.strengths),fb('Next steps for the next lesson',a.next_lesson),fb('For the next time this lesson is taught',a.next_time),
     h('div',{class:'ai'},h('h3',{},'Overall feedback'),mode==='dots'?bul(a.feedback_dots):h('p',{},a.feedback_para))]
    :h('p',{class:'note',style:'margin-top:12px'},'No AI feedback yet. Turn on the AI helper and connect your sheet in Settings, then press Run AI feedback.')))}
@@ -467,6 +486,8 @@ const joinCard=()=>h('div',{class:'card'},h('h2',{},'Pauses'),h('p',{},'When the
  osel('Join pauses',[['0','Off'],['5','5 seconds'],['8','8 seconds'],['12','12 seconds'],['20','20 seconds']],String(S.joinSec),v=>{S.joinSec=+v;save()}));
 /* ---------- delete lines ---------- */
 const spk=l=>l.who==='T'?'Teacher':(l.sp&&stu(l.sp)?nm(stu(l.sp)):'Student');
+const pencil=()=>sv('svg',{viewBox:'0 0 24 24',width:16,height:16,fill:'none',stroke:'currentColor','stroke-width':2,'stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'},sv('path',{d:'M12 20h9'}),sv('path',{d:'M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z'}));
+const plus=()=>sv('svg',{viewBox:'0 0 24 24',width:16,height:16,fill:'none',stroke:'currentColor','stroke-width':2,'stroke-linecap':'round','aria-hidden':'true'},sv('path',{d:'M12 5v14M5 12h14'}));
 const trash=()=>sv('svg',{viewBox:'0 0 24 24',width:18,height:18,fill:'none',stroke:'currentColor','stroke-width':2,'stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'},sv('path',{d:'M3 6h18'}),sv('path',{d:'M8 6V4h8v2'}),sv('path',{d:'M6 6l1 14h10l1-14'}),sv('path',{d:'M10 11v6M14 11v6'}));
 function delLine(id,sid){const i=S.lines.findIndex(l=>l.id===id);if(i<0)return;const l=S.lines[i],snap=JSON.stringify(l),shared=sid&&l.students.length>1,
  keys=(shared?[sid]:l.students).map(x=>x+'|'+l.date+'|'+l.subject),savedAi={};
