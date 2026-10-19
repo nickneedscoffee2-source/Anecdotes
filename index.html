@@ -60,7 +60,8 @@ svg text{font-size:13px;fill:var(--ink)}.note{color:var(--mute);font-size:14px}
 @media(max-width:800px){.convo{flex-direction:column-reverse}.mic{writing-mode:horizontal-tb;width:100%;min-height:0;padding:14px}}
 .ai{background:var(--accbg);border-radius:12px;padding:4px 14px 12px;margin:8px 0}.ai ul{margin:4px 0;padding-left:20px}.ai .item{border-color:#B9DDE0}
 header select{background:#22333F;border:1px solid #3A4E5C;color:#fff;border-radius:10px;padding:8px 10px;font:inherit;max-width:200px}header select option{color:#14212B;background:#fff}
-#tag{flex-wrap:wrap;max-width:360px}.icon{border:0;background:none;color:var(--mute);cursor:pointer;padding:6px;border-radius:8px;flex:none;display:inline-flex;align-self:flex-start}.icon:hover{background:#FBE3E3;color:var(--rec)}
+#tag{flex-wrap:wrap;max-width:360px}.ck{margin-top:6px;width:18px;height:18px;flex:none}.bulkp{background:var(--accbg);border-radius:12px;padding:10px 12px;margin:8px 0 12px}#bulk{margin-bottom:6px}
+.icon{border:0;background:none;color:var(--mute);cursor:pointer;padding:6px;border-radius:8px;flex:none;display:inline-flex;align-self:flex-start}.icon:hover{background:#FBE3E3;color:var(--rec)}
 @media print{header,nav,.noprint{display:none!important}body{background:#fff}}
 </style></head><body>
 <header><div class="brand">Anecdotal assistant</div>
@@ -71,7 +72,7 @@ header select{background:#22333F;border:1px solid #3A4E5C;color:#fff;border-radi
 <div id="toast"></div>
 <script>
 const KEY='anecdotal-v1',$=s=>document.querySelector(s);
-const fresh=()=>({roster:[],lines:[],marks:{},items:{},ai:{},idYear:null,idLast:0,codes:{},n:0,sync:{url:'',key:''},aiOn:true,subject:'Language',strand:'',term:'',mode:'dots',hide:false});
+const fresh=()=>({roster:[],lines:[],marks:{},items:{},ai:{},joinSec:8,idYear:null,idLast:0,codes:{},n:0,sync:{url:'',key:''},aiOn:true,subject:'Language',strand:'',term:'',mode:'dots',hide:false});
 let syncT,syncing=false;
 let S;try{S=Object.assign(fresh(),JSON.parse(localStorage.getItem(KEY)))}catch(e){S=fresh()}
 const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){toast('Could not save on this device.')}queueSync()};
@@ -115,7 +116,7 @@ function buildCtx(){normSubjects();if(!CURR[S.subject])S.subject='Other';if(S.st
 const meta=l=>[l.subject,l.strand,l.term].filter(Boolean).join(' · ');
 const grpMeta=ls=>[ls[0].term,[...new Set(ls.map(l=>l.strand).filter(Boolean))].join(', ')].filter(Boolean).join(' · ');
 const termOf=(sid,d,sub)=>{const l=S.lines.find(x=>x.date===d&&x.subject===sub&&x.students.includes(sid)&&x.term);return l?l.term:S.term};
-let view='live',selS=null,active=[],capturing=false,listening=false,rec=null,interim='',selIds=[],mapRange=0,pTerm='',fTerm='',fSub='';
+let view='live',selS=null,active=[],capturing=false,listening=false,rec=null,interim='',selIds=[],mapRange=0,pTerm='',fTerm='',fSub='',checked=new Set(),bulkTo=new Set();
 
 /* ---------- listening ---------- */
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -134,10 +135,13 @@ const esc=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 function findNames(t){const first={};S.roster.forEach(s=>{const f=s.name.split(/\s+/)[0].toLowerCase();first[f]=(first[f]||0)+1});
  return S.roster.filter(s=>{const f=s.name.split(/\s+/)[0].toLowerCase(),k=[s.name.toLowerCase().replace(/[.\s]+$/,'')];if(first[f]===1)k.push(f);return k.some(x=>new RegExp('\\b'+esc(x)+'\\b','i').test(t))}).map(s=>s.id)}
 function guess(t,named){const last=S.lines[S.lines.length-1];
- if(named||/\?\s*$/.test(t)||/^(ok|okay|so|tell me|show me|what|why|how|can you|great|nice|good|i like|i see|try|remember)\b/i.test(t))return'T';
+ if(named||/\?\s*$/.test(t)||/^(ok|okay|tell me|show me|what|why|how|can you|great|nice|good|i like|i see|try|remember)\b/i.test(t))return'T';
  return last?(last.who==='T'?'S':last.who):'T'}
 function addText(t){const ids=findNames(t);const who=guess(t,ids.length>0);if(ids.length)active=ids;
- S.lines.push({id:uid(),date:day(),subject:S.subject,who,text:t,students:[...active],strand:S.strand||undefined,term:S.term,sp:who==='S'&&active.length===1?active[0]:undefined});save();renderLive()}
+ const sp=who==='S'&&active.length===1?active[0]:undefined,last=S.lines[S.lines.length-1],gap=(S.joinSec||0)*1000;
+ if(gap&&!ids.length&&last&&last.ts&&last.date===day()&&last.who===who&&last.sp===sp&&last.subject===S.subject&&(last.strand||'')===(S.strand||'')&&last.term===S.term&&Date.now()-last.ts<=gap&&String(last.students)===String(active)){
+  last.text=(last.text+' '+t).replace(/\s+/g,' ');last.ts=Date.now();save();renderLive();return}
+ S.lines.push({id:uid(),ts:Date.now(),date:day(),subject:S.subject,who,text:t,students:[...active],strand:S.strand||undefined,term:S.term,sp});save();renderLive()}
 function suggest(ls,sid){const o={participation:Math.min(4,ls.filter(l=>l.who==='S'&&(!l.sp||l.sp===sid)).length)};
  CATS.slice(1).forEach(([c])=>o[c]=Math.min(4,ls.filter(l=>KW[c].test(l.text)).length));return o}
 
@@ -156,7 +160,7 @@ function render(){document.querySelectorAll('#nav button').forEach(b=>b.classLis
 function vLive(m){
  if(!S.roster.length)m.append(h('div',{class:'card'},'Start by adding your class list in ',h('button',{class:'btn sm',onclick:()=>{view='settings';render()}},'Settings'),'.'));
  m.append(h('div',{class:'grid'},
-  h('section',{class:'card'},h('h2',{},'Conversation'),h('div',{class:'convo'},h('div',{id:'tx',class:'tx'}),h('button',{id:'mic',class:'btn mic','aria-label':'Start or stop listening',onclick:()=>listening?stopMic():startMic()})),
+  h('section',{class:'card'},h('h2',{},'Conversation'),h('div',{id:'bulk'}),h('div',{class:'convo'},h('div',{id:'tx',class:'tx'}),h('button',{id:'mic',class:'btn mic','aria-label':'Start or stop listening',onclick:()=>listening?stopMic():startMic()})),
    h('div',{class:'row'},h('input',{id:'typed',placeholder:'Or type a note…','aria-label':'Type a note',onkeydown:e=>{if(e.key==='Enter')typed()}}),h('button',{class:'btn',onclick:typed},'Add note')),
    h('p',{class:'note'},'Highlight text to mark it as Teacher said or Student said.')),
   h('section',{},h('div',{class:'card'},h('h2',{},'Who is in this conversation'),h('div',{id:'chips',class:'chips'})),h('div',{id:'boxes'}))));
@@ -165,12 +169,12 @@ function typed(){const i=$('#typed'),v=i.value.trim();if(v){addText(v);i.value='
 function renderLive(){if(view!=='live'||!$('#tx'))return;
  const td=S.lines.filter(l=>l.date===day()),tx=$('#tx');tx.replaceChildren();
  if(!td.length&&!interim)tx.append(h('div',{class:'empty'},listening?'Say “Soundgarden” to start capturing.':'Press Start listening, or type a note below.'));
- td.forEach(l=>tx.append(h('div',{class:'ln',dataset:{id:l.id}},h('span',{class:'b '+l.who},spk(l)),
+ td.forEach(l=>tx.append(h('div',{class:'ln',dataset:{id:l.id}},h('input',{type:'checkbox',class:'ck','aria-label':'Select this comment',checked:checked.has(l.id)?'':null,onchange:e=>{e.target.checked?checked.add(l.id):checked.delete(l.id);renderBulk()}}),h('span',{class:'b '+l.who},spk(l)),
   h('div',{class:'tx-t'},l.text,h('div',{class:'who'},meta(l)),h('div',{class:'who'},l.students.length?l.students.map(i=>nm(stu(i))).join(', '):h('button',{class:'btn sm',onclick:()=>{l.students=[...active];save();renderLive()}},'Assign to selected students'))),h('button',{class:'icon noprint','aria-label':'Delete this line',title:'Delete this line',onclick:()=>delLine(l.id)},trash()))));
  if(interim)tx.append(h('div',{class:'int'},interim));tx.scrollTop=tx.scrollHeight;
  $('#chips').replaceChildren(...S.roster.map(s=>h('button',{class:'chip'+(active.includes(s.id)?' on':''),'aria-pressed':active.includes(s.id),onclick:()=>{active=active.includes(s.id)?active.filter(x=>x!==s.id):[...active,s.id];renderLive()}},nm(s))));
  $('#boxes').replaceChildren(...active.map(id=>{const ls=td.filter(l=>l.students.includes(id)).slice(-5);
-  return h('div',{class:'box'},h('h3',{},nm(stu(id))),ls.length?ls.map(l=>h('div',{class:'ent'},h('span',{class:'b '+l.who},l.who==='T'?'T':(l.sp?spk(l):'S')),h('div',{class:'tx-t'},short(l.text,22)))):h('span',{class:'note'},'Waiting for comments…'))}))}
+  return h('div',{class:'box'},h('h3',{},nm(stu(id))),ls.length?ls.map(l=>h('div',{class:'ent'},h('span',{class:'b '+l.who},l.who==='T'?'T':(l.sp?spk(l):'S')),h('div',{class:'tx-t'},short(l.text,22)))):h('span',{class:'note'},'Waiting for comments…'))}));renderBulk()}
 
 /* highlight to tag */
 function checkSel(){const t=$('#tag'),sel=getSelection();selIds=[];
@@ -281,7 +285,7 @@ function vSettings(m){
  m.append(h('div',{class:'card'},h('h2',{},'Class list'),ta,h('p',{class:'note'},'One name per line. If two students share a first name, add a last initial to each.'),
   h('button',{class:'btn pri',onclick:()=>{const names=[...new Set(ta.value.split('\n').map(x=>x.trim()).filter(Boolean))].slice(0,60);
    const old=S.roster;S.roster=names.map(n=>old.find(r=>r.name===n)||{id:'',name:n});S.roster.forEach(r=>{if(!r.id)r.id=newId()});save();toast('Class list saved');render()}},'Save class list')),
- syncCard(),yearCard(),
+ syncCard(),yearCard(),joinCard(),
  h('div',{class:'card'},h('h2',{},'Privacy'),
   h('p',{},'Notes stay in this browser unless you connect your Google Sheet. If the AI helper is on, student names are swapped for codes before any text leaves your browser. No audio is recorded or saved, only text, and text is only kept while capturing is on.'),
   h('p',{},'Chrome and Edge send microphone audio to their own speech service to turn it into text. Ask your school or district whether that is allowed before using real student names.'),
@@ -343,6 +347,38 @@ function syncCard(){const u=h('input',{placeholder:'Web app URL (ends in /exec)'
    h('button',{class:'btn',onclick:push},'Save to sheet now'),h('button',{class:'btn',onclick:()=>confirm('Replace the notes on this device with the sheet?')&&pull()},'Load from sheet')),
   h('p',{id:'syncmsg',class:'note',role:'status'},''),
   h('p',{class:'note'},'Only the web app URL and the passcode go here. The Gemini key stays in the Apps Script, never in this page.'))}
+/* ---------- select, combine, attribute ---------- */
+function renderBulk(){const b=$('#bulk');if(!b)return;
+ const td=S.lines.filter(l=>l.date===day());[...checked].forEach(id=>{if(!td.some(l=>l.id===id))checked.delete(id)});
+ const from=id=>td.filter(l=>l.who==='S'&&(l.sp===id||(!l.sp&&l.students.includes(id)))),n=checked.size;
+ const q=osel('Quick select',[['','Select comments…'],['all','All comments today']].concat(S.roster.filter(s=>from(s.id).length).map(s=>[s.id,'All from '+nm(s)])),'',v=>{if(!v)return;checked=new Set(v==='all'?td.map(l=>l.id):from(v).map(l=>l.id));renderLive()});
+ const rows=[h('div',{class:'row',style:'align-items:center;flex-wrap:wrap'},q,n?h('strong',{},n+' selected'):null,n?h('button',{class:'btn sm',onclick:()=>{checked=new Set();renderLive()}},'Clear'):null)];
+ if(n)rows.push(h('div',{class:'bulkp'},
+  h('div',{class:'row',style:'flex-wrap:wrap;align-items:center'},
+   h('button',{class:'btn pri',disabled:n<2?'':null,onclick:combine},'Combine into one comment'),
+   h('button',{class:'btn',style:'color:var(--t)',onclick:()=>setSpeaker('T')},'Teacher said'),
+   osel('Student said by',[['','Student said by…']].concat(S.roster.map(s=>[s.id,nm(s)])),'',v=>v&&setSpeaker('S',v)),
+   h('button',{class:'btn',style:'color:var(--rec)',onclick:delChecked},'Delete')),
+  h('p',{class:'note',style:'margin:10px 0 6px'},'File under one student or a group:'),
+  h('div',{class:'chips'},S.roster.map(s=>h('button',{class:'chip'+(bulkTo.has(s.id)?' on':''),'aria-pressed':bulkTo.has(s.id),onclick:()=>{bulkTo.has(s.id)?bulkTo.delete(s.id):bulkTo.add(s.id);renderBulk()}},nm(s)))),
+  h('button',{class:'btn',style:'margin-top:8px',disabled:bulkTo.size?null:'',onclick:fileUnder},'File under selected students')));
+ b.replaceChildren(...rows)}
+function bulk(msg,fn){const sel=S.lines.filter(l=>checked.has(l.id)),keys=new Set(),k=l=>l.students.forEach(x=>keys.add(x+'|'+l.date+'|'+l.subject));
+ sel.forEach(k);const before=JSON.stringify(S.lines),aiB=JSON.stringify(S.ai);fn(sel);
+ S.lines.filter(l=>checked.has(l.id)).forEach(k);keys.forEach(x=>delete S.ai[x]);
+ save();checked=new Set();bulkTo=new Set();renderLive();
+ toast(msg,()=>{S.lines=JSON.parse(before);S.ai=JSON.parse(aiB);save();renderLive()})}
+function combine(){const sel=S.lines.filter(l=>checked.has(l.id));if(sel.length<2)return;
+ if(new Set(sel.map(l=>l.who)).size>1)return toast('Pick comments from one speaker to combine. Teacher and student comments can’t be mixed.');
+ bulk('Combined '+sel.length+' comments into one.',s=>{const f=s[0];
+  f.text=s.map(l=>l.text.trim()).join(' ').replace(/\s+/g,' ');f.students=[...new Set(s.flatMap(l=>l.students))];
+  {const sps=[...new Set(s.map(l=>l.sp).filter(Boolean))];if(sps.length===1)f.sp=sps[0];else delete f.sp}if(s.some(l=>l.manual))f.manual=1;
+  const drop=new Set(s.slice(1).map(l=>l.id));S.lines=S.lines.filter(l=>!drop.has(l.id))})}
+const setSpeaker=(w,sid)=>bulk(w==='T'?'Marked as Teacher.':'Attributed to '+nm(stu(sid))+'.',sel=>sel.forEach(l=>{l.who=w;l.manual=1;if(w==='T')delete l.sp;else{l.sp=sid;if(!l.students.includes(sid))l.students.push(sid)}}));
+const fileUnder=()=>{const ids=[...bulkTo];if(!ids.length)return;bulk('Filed under '+ids.map(i=>nm(stu(i))).join(', ')+'.',sel=>sel.forEach(l=>{l.students=ids.slice();l.manual=1;if(l.sp&&!ids.includes(l.sp))delete l.sp;if(ids.length===1&&l.who==='S')l.sp=ids[0]}))};
+const delChecked=()=>bulk('Deleted '+checked.size+' comments.',sel=>{const d=new Set(sel.map(l=>l.id));S.lines=S.lines.filter(l=>!d.has(l.id))});
+const joinCard=()=>h('div',{class:'card'},h('h2',{},'Pauses'),h('p',{},'When the same speaker keeps talking after a short pause, join it into one comment automatically.'),
+ osel('Join pauses',[['0','Off'],['5','5 seconds'],['8','8 seconds'],['12','12 seconds'],['20','20 seconds']],String(S.joinSec),v=>{S.joinSec=+v;save()}));
 /* ---------- delete lines ---------- */
 const spk=l=>l.who==='T'?'Teacher':(l.sp&&stu(l.sp)?nm(stu(l.sp)):'Student');
 const trash=()=>sv('svg',{viewBox:'0 0 24 24',width:18,height:18,fill:'none',stroke:'currentColor','stroke-width':2,'stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'},sv('path',{d:'M3 6h18'}),sv('path',{d:'M8 6V4h8v2'}),sv('path',{d:'M6 6l1 14h10l1-14'}),sv('path',{d:'M10 11v6M14 11v6'}));
