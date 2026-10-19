@@ -137,7 +137,7 @@ function buildCtx(){normSubjects();if(!CURR[S.subject])S.subject='Other';if(S.st
 const meta=l=>[l.subject,l.strand,l.term].filter(Boolean).join(' · ');
 const grpMeta=ls=>[ls[0].term,[...new Set(ls.map(l=>l.strand).filter(Boolean))].join(', ')].filter(Boolean).join(' · ');
 const termOf=(sid,d,sub)=>{const l=S.lines.find(x=>x.date===d&&x.subject===sub&&x.students.includes(sid)&&x.term);return l?l.term:S.term};
-let view='live',selS=null,active=[],capturing=false,listening=false,rec=null,interim='',selIds=[],mapRange=0,pTerm='',fTerm='',fSub='',checked=new Set(),bulkTo=new Set(),rmP=null,lEdit=null,trSel='',trForm=null,trDate='',trWk={},trCont=null,prDlg=null,lessonOn=false,lessonMic=false,lessonSel=null,lHl=new Set(),lf={sub:'',strand:'',term:'',grade:'',from:'',to:''};
+let view='live',selS=null,active=[],capturing=false,listening=false,rec=null,interim='',selIds=[],mapRange=0,pTerm='',fTerm='',fSub='',checked=new Set(),bulkTo=new Set(),rmP=null,lEdit=null,trSel='',trForm=null,trDate='',trWk={},trCont=null,prDlg=null,edLbl=null,lessonOn=false,lessonMic=false,lessonSel=null,lHl=new Set(),lf={sub:'',strand:'',term:'',grade:'',from:'',to:''};
 
 /* ---------- listening ---------- */
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -237,12 +237,12 @@ function detail(sid){
    Object.keys(TYPES).map(k=>items.filter(i=>i.type===k).length?h('div',{},h('h3',{},TYPES[k]),items.filter(i=>i.type===k).map(itemRow)):null)),
   trackerPanel(sid),
   Object.keys(g).sort().reverse().map(key=>{const[d,sub]=key.split('|'),ls=g[key];
-   return h('div',{class:'card'},h('div',{class:'row',style:'align-items:center;justify-content:space-between'},h('h2',{style:'margin:0'},fd(d)+' · '+sub+(grpMeta(ls)?' · '+grpMeta(ls):'')),S.aiOn&&S.sync.url?h('button',{class:'btn sm noprint',onclick:()=>analyze(sid,d,sub,false)},S.ai[sid+'|'+d+'|'+sub]?'Re-run AI':'Analyze with AI'):null),marksRow(sid,d,sub,ls),h('p',{class:'note'},'Outlined dots are suggestions. Tap to confirm.'),aiPanel(sid,d,sub),
-    ls.map(l=>h('div',{class:'ent'},h('span',{class:'b '+l.who},spk(l)),
+   return h('div',{class:'card'},h('div',{class:'row',style:'align-items:center;justify-content:space-between'},h('h2',{style:'margin:0'},fd(d)+' · '+sub+(grpMeta(ls)?' · '+grpMeta(ls):''),h('button',{class:'icon noprint',title:'Edit subject, strand or period','aria-label':'Edit subject for '+fd(d)+' '+sub,style:'vertical-align:middle',onclick:()=>{edLbl={sid,anchor:'g:'+key,ids:ls.map(l=>l.id)};render()}},pencil())),S.aiOn&&S.sync.url?h('button',{class:'btn sm noprint',onclick:()=>analyze(sid,d,sub,false)},S.ai[sid+'|'+d+'|'+sub]?'Re-run AI':'Analyze with AI'):null),edLbl&&edLbl.anchor==='g:'+key?lblEditor(edLbl):null,marksRow(sid,d,sub,ls),h('p',{class:'note'},'Outlined dots are suggestions. Tap to confirm.'),aiPanel(sid,d,sub),
+    ls.map(l=>h('div',{},h('div',{class:'ent'},h('span',{class:'b '+l.who},spk(l)),
      h('div',{class:'tx-t'},S.mode==='dots'?'• '+short(l.text):l.text,l.students.length>1?h('div',{class:'who'},'With '+l.students.filter(i=>i!==sid).map(i=>nm(stu(i))).join(', ')):null),
      h('button',{class:'btn sm',onclick:()=>addItem(sid,'S',S.mode==='dots'?short(l.text):l.text,l.subject,l.term)},'+ Strength'),
      h('button',{class:'btn sm',onclick:()=>addItem(sid,'N',S.mode==='dots'?short(l.text):l.text,l.subject,l.term)},'+ Next step'),
-     h('button',{class:'icon noprint','aria-label':'Remove this line from '+nm(stu(sid)),title:'Remove from this student',onclick:()=>delLine(l.id,sid)},trash()))))}),
+     h('button',{class:'icon noprint',title:'Change this comment’s subject','aria-label':'Edit subject of this comment',onclick:()=>{edLbl={sid,anchor:'l:'+l.id,ids:[l.id]};render()}},pencil()),h('button',{class:'icon noprint','aria-label':'Remove this line from '+nm(stu(sid)),title:'Remove from this student',onclick:()=>delLine(l.id,sid)},trash())),edLbl&&edLbl.anchor==='l:'+l.id?lblEditor(edLbl):null)))}),
   mine.length?null:empty('No conversations yet. Notes appear here when this student is named.'))}
 function itemRow(i){return h('div',{class:'item'},h('span',{},i.text,i.subject?h('span',{class:'tag'},' · '+i.subject+(i.term?' · '+i.term:'')):null),h('button',{class:'btn sm noprint','aria-label':'Delete',onclick:()=>{for(const k in S.items)S.items[k]=S.items[k].filter(x=>x.id!==i.id);save();render()}},'Delete'))}
 
@@ -665,6 +665,7 @@ function renderBulk(){const b=$('#bulk');if(!b)return;
    h('button',{class:'btn pri',disabled:n<2?'':null,onclick:combine},'Combine into one comment'),
    h('button',{class:'btn',style:'color:var(--t)',onclick:()=>setSpeaker('T')},'Teacher said'),
    osel('Student said by',[['','Student said by…']].concat(S.roster.map(s=>[s.id,nm(s)])),'',v=>v&&setSpeaker('S',v)),
+   osel('Change subject',[['','Change subject to…']].concat(SUBJ.map(x=>[x,x])),'',v=>v&&setSubject(v)),
    h('button',{class:'btn',style:'color:var(--rec)',onclick:delChecked},'Delete')),
   h('p',{class:'note',style:'margin:10px 0 6px'},'File under one student or a group:'),
   h('div',{class:'chips'},S.roster.map(s=>h('button',{class:'chip'+(bulkTo.has(s.id)?' on':''),'aria-pressed':bulkTo.has(s.id),onclick:()=>{bulkTo.has(s.id)?bulkTo.delete(s.id):bulkTo.add(s.id);renderBulk()}},nm(s)))),
@@ -686,6 +687,23 @@ const fileUnder=()=>{const ids=[...bulkTo];if(!ids.length)return;bulk('Filed und
 const delChecked=()=>bulk('Deleted '+checked.size+' comments.',sel=>{const d=new Set(sel.map(l=>l.id));S.lines=S.lines.filter(l=>!d.has(l.id))});
 const joinCard=()=>h('div',{class:'card'},h('h2',{},'Pauses'),h('p',{},'When the same speaker keeps talking after a short pause, join it into one comment automatically.'),
  osel('Join pauses',[['0','Off'],['5','5 seconds'],['8','8 seconds'],['12','12 seconds'],['20','20 seconds']],String(S.joinSec),v=>{S.joinSec=+v;save()}));
+/* ---------- change the subject of comments ---------- */
+const setSubject=v=>bulk('Moved '+checked.size+' comment'+(checked.size>1?'s':'')+' to '+v+'.',sel=>sel.forEach(l=>{l.subject=v;l.strand=undefined}));
+function lblEditor(ed){const ls=S.lines.filter(l=>ed.ids.includes(l.id)),f=ls[0];if(!f)return null;
+ let sub=f.subject,strand=f.strand||'',term=f.term||S.term;const strandBox=h('span',{});
+ const mkStrand=()=>strandBox.replaceChildren(osel('Strand',[['','Any strand']].concat((CURR[sub]||[]).map(x=>[x,x])),strand,v=>{strand=v}));
+ const subSel=osel('Subject',(SUBJ.includes(sub)?SUBJ:[sub].concat(SUBJ)).map(x=>[x,x]),sub,v=>{sub=v;strand='';mkStrand()});mkStrand();
+ return h('div',{class:'bulkp noprint'},h('p',{class:'note',style:'margin:0 0 6px'},ed.ids.length>1?'Change the subject for these '+ed.ids.length+' comments. If a comment is shared with a group, it changes for the whole group.':'Change the subject for this comment. If it is shared with a group, it changes for the whole group.'),
+  h('div',{class:'row',style:'flex-wrap:wrap;align-items:center'},subSel,strandBox,osel('Period',TERMS.map(x=>[x,x]),term,v=>{term=v}),
+   h('button',{class:'btn pri sm',onclick:()=>relabel(ed,sub,strand,term)},'Save'),h('button',{class:'btn sm',onclick:()=>{edLbl=null;render()}},'Cancel')))}
+function relabel(ed,sub,strand,term){const ids=new Set(ed.ids),sel=S.lines.filter(l=>ids.has(l.id));if(!sel.length)return;
+ const before=JSON.stringify(S.lines),aiB=JSON.stringify(S.ai),mkB=JSON.stringify(S.marks),keys=new Set(),oldSub=sel[0].subject,date=sel[0].date;
+ sel.forEach(l=>l.students.forEach(x=>keys.add(x+'|'+l.date+'|'+l.subject)));
+ sel.forEach(l=>{l.subject=sub;l.strand=strand||undefined;l.term=term});
+ sel.forEach(l=>l.students.forEach(x=>keys.add(x+'|'+l.date+'|'+l.subject)));keys.forEach(k=>delete S.ai[k]);
+ if(ed.anchor[0]==='g'&&oldSub!==sub){const ok=ed.sid+'|'+date+'|'+oldSub,nk=ed.sid+'|'+date+'|'+sub;if(S.marks[ok]&&!S.marks[nk]){S.marks[nk]=S.marks[ok];delete S.marks[ok]}}
+ edLbl=null;save();render();
+ toast('Moved to '+sub+'.',()=>{S.lines=JSON.parse(before);S.ai=JSON.parse(aiB);S.marks=JSON.parse(mkB);save();render()})}
 /* ---------- delete lines ---------- */
 const spk=l=>l.who==='T'?'Teacher':(l.sp&&stu(l.sp)?nm(stu(l.sp)):'Student');
 const pencil=()=>sv('svg',{viewBox:'0 0 24 24',width:16,height:16,fill:'none',stroke:'currentColor','stroke-width':2,'stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'},sv('path',{d:'M12 20h9'}),sv('path',{d:'M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z'}));
