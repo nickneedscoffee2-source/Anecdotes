@@ -82,7 +82,7 @@ header select{background:#22333F;border:1px solid #3A4E5C;color:#fff;border-radi
 <div id="printArea"></div>
 <script>
 const KEY='anecdotal-v1',$=s=>document.querySelector(s);
-const fresh=()=>({roster:[],lines:[],marks:{},items:{},ai:{},tomb:{},trackers:[],tracks:{},joinSec:8,grade:'',lmode:'dots',lessons:[],idYear:null,idLast:0,codes:{},n:0,sync:{url:'',key:''},aiOn:true,subject:'Language',strand:'',term:'',mode:'dots',hide:false});
+const fresh=()=>({roster:[],lines:[],marks:{},items:{},ai:{},tomb:{},trackers:[],tracks:{},joinSec:8,tidy:true,spokenPunct:false,lang:'en-CA',fixes:'',grade:'',lmode:'dots',lessons:[],idYear:null,idLast:0,codes:{},n:0,sync:{url:'',key:''},aiOn:true,subject:'Language',strand:'',term:'',mode:'dots',hide:false});
 let syncT,syncing=false;
 let S;try{S=Object.assign(fresh(),JSON.parse(localStorage.getItem(KEY)))}catch(e){S=fresh()}
 const persist=()=>{try{stamp();localStorage.setItem(KEY,JSON.stringify(S))}catch(e){toast('Could not save on this device.')}};
@@ -143,7 +143,7 @@ let view='live',selS=null,active=[],capturing=false,listening=false,rec=null,int
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 function startMic(){
  if(!SR){toast('Speech recognition needs Chrome or Edge. You can still type notes.');return}
- rec=new SR();rec.continuous=true;rec.interimResults=true;rec.lang='en-CA';
+ rec=new SR();rec.continuous=true;rec.interimResults=true;if(S.lang)rec.lang=S.lang;
  rec.onresult=e=>{let f='',i='';for(let n=e.resultIndex;n<e.results.length;n++){const r=e.results[n];if(r.isFinal)f+=r[0].transcript;else i+=r[0].transcript}
   interim=(capturing||lessonOn)?i:'';if(f.trim())handle(f.trim());renderLive();renderLesson()};
  rec.onend=()=>{if(listening)try{rec.start()}catch(e){}};
@@ -151,18 +151,18 @@ function startMic(){
  listening=true;try{rec.start()}catch(e){}syncBar()}
 function stopMic(){lessonFinish();lessonMic=false;listening=false;capturing=false;interim='';try{rec.stop()}catch(e){}syncBar();renderLive();autoAnalyze()}
 function toggleCap(){capturing=!capturing;interim='';toast(capturing?'Capturing started':'Capturing stopped');syncBar();renderLive();if(!capturing)autoAnalyze()}
-function handle(t){if(lessonOn){addLessonText(t);return}t.split(/sound\s?garden/ig).forEach((p,i)=>{if(i>0)toggleCap();if(capturing&&p.trim())addText(p.trim())})}
+function handle(t){if(lessonOn){addLessonText(fixText(t));return}t.split(/sound\s?gardens?/ig).forEach((p,i)=>{if(i>0)toggleCap();if(capturing&&p.trim())addText(fixText(p.trim()))})}
 const esc=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 function findNames(t){const first={};S.roster.forEach(s=>{const f=s.name.split(/\s+/)[0].toLowerCase();first[f]=(first[f]||0)+1});
- return S.roster.filter(s=>{const f=s.name.split(/\s+/)[0].toLowerCase(),k=[s.name.toLowerCase().replace(/[.\s]+$/,'')];if(first[f]===1)k.push(f);return k.some(x=>new RegExp('\\b'+esc(x)+'\\b','i').test(t))}).map(s=>s.id)}
+ return S.roster.filter(s=>{const f=s.name.split(/\s+/)[0].toLowerCase(),k=[s.name.toLowerCase().replace(/[.\s]+$/,'')];if(first[f]===1)k.push(f);(s.alias||[]).forEach(a=>k.push(a.toLowerCase()));return k.some(x=>new RegExp('\\b'+esc(x)+'\\b','i').test(t))}).map(s=>s.id)}
 function guess(t,named){const last=S.lines[S.lines.length-1];
  if(named||/\?\s*$/.test(t)||/^(ok|okay|tell me|show me|what|why|how|can you|great|nice|good|i like|i see|try|remember)\b/i.test(t))return'T';
  return last?(last.who==='T'?'S':last.who):'T'}
 function addText(t){const ids=findNames(t);const who=guess(t,ids.length>0);if(ids.length)active=ids;
  const sp=who==='S'&&active.length===1?active[0]:undefined,last=S.lines[S.lines.length-1],gap=(S.joinSec||0)*1000;
  if(gap&&!ids.length&&last&&last.ts&&last.date===day()&&last.who===who&&last.sp===sp&&last.subject===S.subject&&(last.strand||'')===(S.strand||'')&&last.term===S.term&&Date.now()-last.ts<=gap&&String(last.students)===String(active)){
-  last.text=(last.text+' '+t).replace(/\s+/g,' ');last.ts=Date.now();save();renderLive();return}
- S.lines.push({id:uid(),ts:Date.now(),date:day(),subject:S.subject,who,text:t,students:[...active],strand:S.strand||undefined,term:S.term,sp});save();renderLive()}
+  joinTidy(last,t,'text');last.ts=Date.now();save();renderLive();return}
+ const tn=tidyNew(t);S.lines.push({id:uid(),ts:Date.now(),date:day(),subject:S.subject,who,text:tn.text,auto:tn.auto||undefined,students:[...active],strand:S.strand||undefined,term:S.term,sp});save();renderLive()}
 function suggest(ls,sid){const o={participation:Math.min(4,ls.filter(l=>l.who==='S'&&(!l.sp||l.sp===sid)).length)};
  CATS.slice(1).forEach(([c])=>o[c]=Math.min(4,ls.filter(l=>KW[c].test(l.text)).length));return o}
 
@@ -190,7 +190,7 @@ function typed(){const i=$('#typed'),v=i.value.trim();if(v){addText(v);i.value='
 function renderLive(){if(view!=='live'||!$('#tx'))return;
  const td=S.lines.filter(l=>l.date===day()),tx=$('#tx');tx.replaceChildren();
  if(!td.length&&!interim)tx.append(h('div',{class:'empty'},listening?'Say “Soundgarden” to start capturing.':'Press Start listening, or type a note below.'));
- td.forEach(l=>tx.append(h('div',{class:'ln',dataset:{id:l.id}},h('input',{type:'checkbox',class:'ck','aria-label':'Select this comment',checked:checked.has(l.id)?'':null,onchange:e=>{e.target.checked?checked.add(l.id):checked.delete(l.id);renderBulk()}}),h('span',{class:'b '+l.who},spk(l)),
+ td.forEach(l=>tx.append(h('div',{class:'ln',dataset:{id:l.id}},Object.assign(h('input',{type:'checkbox',class:'ck',autocomplete:'off','aria-label':'Select this comment',onchange:e=>{e.target.checked?checked.add(l.id):checked.delete(l.id);renderBulk()}}),{checked:checked.has(l.id)}),h('span',{class:'b '+l.who},spk(l)),
   h('div',{class:'tx-t'},l.text,h('div',{class:'who'},meta(l)),whoRow(l)),h('button',{class:'icon noprint','aria-label':'Delete this line',title:'Delete this line',onclick:()=>delLine(l.id)},trash()))));
  if(interim)tx.append(h('div',{class:'int'},interim));tx.scrollTop=tx.scrollHeight;
  $('#chips').replaceChildren(...S.roster.map(s=>h('button',{class:'chip'+(active.includes(s.id)?' on':''),'aria-pressed':active.includes(s.id),onclick:()=>{active=active.includes(s.id)?active.filter(x=>x!==s.id):[...active,s.id];renderLive()}},nm(s))));
@@ -304,11 +304,11 @@ function vMap(m){
 
 /* ---------- settings ---------- */
 function vSettings(m){
- const ta=h('textarea',{'aria-label':'Class list',placeholder:'One student per line. Use a first name and last initial, like Emily R.'},S.roster.map(s=>s.name).join('\n'));
- m.append(h('div',{class:'card'},h('h2',{},'Class list'),ta,h('p',{class:'note'},'One name per line. If two students share a first name, add a last initial to each.'),
-  h('button',{class:'btn pri',onclick:()=>{const names=[...new Set(ta.value.split('\n').map(x=>x.trim()).filter(Boolean))].slice(0,60);
-   const old=S.roster;S.roster=names.map(n=>old.find(r=>r.name===n)||{id:'',name:n});S.roster.forEach(r=>{if(!r.id)r.id=newId()});save();toast('Class list saved');render()}},'Save class list')),
- syncCard(),yearCard(),joinCard(),
+ const ta=h('textarea',{'aria-label':'Class list',placeholder:'One student per line. Use a first name and last initial, like Emily R.'},S.roster.map(s=>s.name+(s.alias&&s.alias.length?' = '+s.alias.join(', '):'')).join('\n'));
+ m.append(h('div',{class:'card'},h('h2',{},'Class list'),ta,h('p',{class:'note'},'One name per line. If two students share a first name, add a last initial to each. If the microphone often mishears a name, add the way it writes it after an equals sign, for example: Emily R. = Emilie, Amelie'),
+  h('button',{class:'btn pri',onclick:()=>{const rows=[],seen=new Set();ta.value.split('\n').map(x=>x.trim()).filter(Boolean).forEach(l=>{const p=l.split('='),name=p[0].trim();if(!name||seen.has(name))return;seen.add(name);rows.push({name,alias:(p[1]||'').split(',').map(x=>x.trim()).filter(Boolean)})});
+   const old=S.roster;S.roster=rows.slice(0,60).map(o=>{const r=old.find(x=>x.name===o.name)||{id:'',name:o.name};r.alias=o.alias.length?o.alias:undefined;return r});S.roster.forEach(r=>{if(!r.id)r.id=newId()});save();toast('Class list saved');render()}},'Save class list')),
+ syncCard(),yearCard(),joinCard(),speechCard(),
  h('div',{class:'card'},h('h2',{},'Privacy'),
   h('p',{},'Notes stay in this browser unless you connect your Google Sheet. If the AI helper is on, student names are swapped for codes before any text leaves your browser. No audio is recorded or saved, only text, and text is only kept while capturing is on.'),
   h('p',{},'Chrome and Edge send microphone audio to their own speech service to turn it into text. Ask your school or district whether that is allowed before using real student names.'),
@@ -322,7 +322,7 @@ function exportCsv(){const q=v=>{v=String(v);if(/^[=+\-@]/.test(v))v="'"+v;retur
 /* ---------- sheet + AI ---------- */
 const lbl=id=>'Student '+(parseInt(String(id).slice(-3),10)||0);
 const rest=t=>String(t||'').replace(/Student (\d+)/g,(m,n)=>{const r=S.roster.find(x=>parseInt(String(x.id).slice(-3),10)===+n);return r?nm(r):m});
-function hide(t){const p=[];S.roster.forEach(s=>{const f=s.name.split(/\s+/)[0],dup=S.roster.filter(r=>r.name.split(/\s+/)[0].toLowerCase()===f.toLowerCase()).length>1;p.push([s.name.replace(/[.\s]+$/,''),lbl(s.id)]);if(!dup)p.push([f,lbl(s.id)])});
+function hide(t){const p=[];S.roster.forEach(s=>{const f=s.name.split(/\s+/)[0],dup=S.roster.filter(r=>r.name.split(/\s+/)[0].toLowerCase()===f.toLowerCase()).length>1;p.push([s.name.replace(/[.\s]+$/,''),lbl(s.id)]);(s.alias||[]).forEach(a=>p.push([a,lbl(s.id)]));if(!dup)p.push([f,lbl(s.id)])});
  p.sort((a,b)=>b[0].length-a[0].length).forEach(([k,c])=>t=t.replace(new RegExp('\\b'+esc(k)+'\\b','ig'),c));return t}
 const netMsg=e=>e.name==='AbortError'?'The sheet took too long to answer. Wait a minute and try again.':"Can't reach the web app. Open the URL in a browser tab: you should see {\"ok\":true}. If not, set Who has access to Anyone and deploy again.";
 async function api(action,extra,ms){const c=new AbortController(),t=setTimeout(()=>c.abort(),ms||45000);
@@ -569,12 +569,12 @@ function rmStudent(id,sid){const l=S.lines.find(x=>x.id===id);if(!l)return;const
 
 /* ---------- lesson feedback ---------- */
 const COMMON=new Set(['will','mark','hope','grace','joy','rose','may','bill','art','dawn','faith','summer','sky','april','june','august','ivy','lily','daisy','amber','ruby','pearl','jade','page','chase','drew','rich','pat','jack','grant','miles','frank','guy','case','ray','gene','major','king','lane','sage','river','cash']);
-function scrub(t){const ps=[];S.roster.forEach(r=>{ps.push(r.name.replace(/[.\s]+$/,''));const f=r.name.split(/\s+/)[0];if(f.length>1)ps.push(f)});
+function scrub(t){const ps=[];S.roster.forEach(r=>{ps.push(r.name.replace(/[.\s]+$/,''));(r.alias||[]).forEach(a=>{if(a.length>1)ps.push(a)});const f=r.name.split(/\s+/)[0];if(f.length>1)ps.push(f)});
  ps.sort((a,b)=>b.length-a.length).forEach(k=>{
   if(COMMON.has(k.toLowerCase()))[k,k[0].toUpperCase()+k.slice(1),k.toUpperCase()].filter((v,i,a)=>a.indexOf(v)===i).forEach(v=>{t=t.replace(new RegExp('\\b'+esc(v)+'\\b','g'),'[student]')});
   else t=t.replace(new RegExp('\\b'+esc(k)+'\\b','gi'),'[student]')});return t}
 function addLessonText(t){const L=S.lessons.find(x=>x.id===lessonSel);if(!L)return;t=scrub(t).trim();if(!t)return;
- const last=L.seg[L.seg.length-1],now=Date.now();if(last&&now-last.ts<=6000&&last.t.length<400){last.t+=' '+t;last.ts=now}else L.seg.push({t,ts:now});save();renderLesson()}
+ const last=L.seg[L.seg.length-1],now=Date.now();if(last&&now-last.ts<=6000&&last.t.length<400){joinTidy(last,t,'t');last.ts=now}else{const tn=tidyNew(t);L.seg.push({t:tn.text,auto:tn.auto||undefined,ts:now})}save();renderLesson()}
 function renderLesson(){if(view!=='lesson'||!lessonOn)return;const L=S.lessons.find(x=>x.id===lessonSel),b=$('#ltx');if(!L||!b)return;
  b.replaceChildren(...L.seg.map((s,i)=>h('div',{class:'sg'},h('span',{class:'tag'},(i+1)+'. '),s.t)),...(interim?[h('div',{class:'int'},scrub(interim))]:[]));b.scrollTop=b.scrollHeight}
 function startLesson(){
@@ -649,6 +649,7 @@ function lessonReview(L){const a=L.ai,mode=S.lmode||'dots';
    h('div',{class:'row',style:'flex-wrap:wrap;align-items:center'},
     h('div',{class:'seg'},[['dots','Dot jots'],['para','Paragraph']].map(([k,l])=>h('button',{class:mode===k?'on':'',onclick:()=>{S.lmode=k;save();render()}},l))),
     S.aiOn&&S.sync.url?h('button',{class:'btn pri',onclick:()=>analyzeLesson(L.id)},a?'Re-run AI feedback':'Run AI feedback'):null,
+    S.aiOn&&S.sync.url?h('button',{class:'btn',onclick:()=>punctLesson(L)},'Add punctuation (AI)'):null,
     h('button',{class:'btn',style:'color:var(--rec)',onclick:()=>{if(confirm('Delete this lesson and its feedback?')){S.lessons=S.lessons.filter(x=>x.id!==L.id);lessonSel=null;save();render()}}},'Delete')),
    a?[a.stale?h('p',{class:'note',style:'color:var(--rec)'},'The transcript was edited after this feedback was written. Run AI feedback again to update it.'):null,h('div',{class:'ai'},h('h3',{},'Lesson summary'),mode==='dots'?bul(a.summary_dots):h('p',{},a.summary_para)),
     fb('What the AI heard you cover',a.covered),fb('Strengths',a.strengths),fb('Next steps for the next lesson',a.next_lesson),fb('For the next time this lesson is taught',a.next_time),
@@ -659,14 +660,14 @@ function renderBulk(){const b=$('#bulk');if(!b)return;
  const td=S.lines.filter(l=>l.date===day());[...checked].forEach(id=>{if(!td.some(l=>l.id===id))checked.delete(id)});
  const from=id=>td.filter(l=>l.who==='S'&&(l.sp===id||(!l.sp&&l.students.includes(id)))),n=checked.size;
  const q=osel('Quick select',[['','Select comments…'],['all','All comments today']].concat(S.roster.filter(s=>from(s.id).length).map(s=>[s.id,'All from '+nm(s)])),'',v=>{if(!v)return;checked=new Set(v==='all'?td.map(l=>l.id):from(v).map(l=>l.id));renderLive()});
- const rows=[h('div',{class:'row',style:'align-items:center;flex-wrap:wrap'},q,n?h('strong',{},n+' selected'):null,n?h('button',{class:'btn sm',onclick:()=>{checked=new Set();renderLive()}},'Clear'):null)];
+ const rows=[h('div',{class:'row',style:'align-items:center;flex-wrap:wrap'},q,n?h('strong',{},n+' selected'):null,n?h('button',{class:'btn sm',onclick:()=>{checked=new Set();document.querySelectorAll('#tx .ck').forEach(e=>{e.checked=false});renderLive()}},'Untick all'):null)];
  if(n)rows.push(h('div',{class:'bulkp'},
   h('div',{class:'row',style:'flex-wrap:wrap;align-items:center'},
    h('button',{class:'btn pri',disabled:n<2?'':null,onclick:combine},'Combine into one comment'),
    h('button',{class:'btn',style:'color:var(--t)',onclick:()=>setSpeaker('T')},'Teacher said'),
    osel('Student said by',[['','Student said by…']].concat(S.roster.map(s=>[s.id,nm(s)])),'',v=>v&&setSpeaker('S',v)),
    osel('Change subject',[['','Change subject to…']].concat(SUBJ.map(x=>[x,x])),'',v=>v&&setSubject(v)),
-   h('button',{class:'btn',style:'color:var(--rec)',onclick:delChecked},'Delete')),
+   h('button',{class:'btn',style:'color:var(--rec)',onclick:delChecked},'Delete selected'),S.aiOn&&S.sync.url?h('button',{class:'btn',onclick:punctLive},'Add punctuation (AI)'):null),
   h('p',{class:'note',style:'margin:10px 0 6px'},'File under one student or a group:'),
   h('div',{class:'chips'},S.roster.map(s=>h('button',{class:'chip'+(bulkTo.has(s.id)?' on':''),'aria-pressed':bulkTo.has(s.id),onclick:()=>{bulkTo.has(s.id)?bulkTo.delete(s.id):bulkTo.add(s.id);renderBulk()}},nm(s)))),
   h('button',{class:'btn',style:'margin-top:8px',disabled:bulkTo.size?null:'',onclick:fileUnder},'File under selected students')));
@@ -687,6 +688,57 @@ const fileUnder=()=>{const ids=[...bulkTo];if(!ids.length)return;bulk('Filed und
 const delChecked=()=>bulk('Deleted '+checked.size+' comments.',sel=>{const d=new Set(sel.map(l=>l.id));S.lines=S.lines.filter(l=>!d.has(l.id))});
 const joinCard=()=>h('div',{class:'card'},h('h2',{},'Pauses'),h('p',{},'When the same speaker keeps talking after a short pause, join it into one comment automatically.'),
  osel('Join pauses',[['0','Off'],['5','5 seconds'],['8','8 seconds'],['12','12 seconds'],['20','20 seconds']],String(S.joinSec),v=>{S.joinSec=+v;save()}));
+/* ---------- punctuation, corrections and microphone ---------- */
+const QW=/^(what|why|how|when|where|who|which|can|could|do|does|did|is|are|was|were|will|would|should|may|might|have|has)\b/i;
+function fixText(t){(S.fixes||'').split('\n').forEach(l=>{const p=l.split('=');if(p.length<2)return;const a=p[0].trim(),b=p.slice(1).join('=').trim();if(a)t=t.replace(new RegExp('\\b'+esc(a)+'\\b','gi'),b)});
+ if(S.spokenPunct)t=t.replace(/\s*\b(?:period|full stop)\b/gi,'.').replace(/\s*\bcomma\b/gi,',').replace(/\s*\bquestion mark\b/gi,'?').replace(/\s*\bexclamation (?:point|mark)\b/gi,'!').replace(/([.?!,])(?=[A-Za-z])/g,'$1 ');return t}
+const tidyOn=()=>S.tidy!==false;
+function tidyEnd(t){return /[.?!]$/.test(t)?t:t+(QW.test(t.replace(/^.*[.?!]\s+/,''))?'?':'.')}
+function tidyNew(t){if(!tidyOn())return{text:t};let x=t.replace(/\bi\b/g,'I');x=x?x[0].toUpperCase()+x.slice(1):x;const had=/[.?!]$/.test(x);return{text:tidyEnd(x),auto:!had}}
+function joinTidy(o,t,k){if(!tidyOn()){o[k]=(o[k]+' '+t).replace(/\s+/g,' ');return}
+ const base=o.auto?o[k].slice(0,-1):o[k];let x=(base+' '+t).replace(/\s+/g,' ').replace(/\bi\b/g,'I');const had=/[.?!]$/.test(x);o[k]=tidyEnd(x);o.auto=!had}
+/* names are swapped for placeholders before any text goes to the AI, then put back exactly as spoken */
+function maskNames(t){const parts=[],f=[];S.roster.forEach(r=>{f.push(r.name.replace(/[.\s]+$/,''),r.name.split(/\s+/)[0]);(r.alias||[]).forEach(a=>f.push(a))});
+ f.filter(x=>x&&x.length>1).sort((a,b)=>b.length-a.length).forEach(k=>{t=t.replace(new RegExp('\\b'+esc(k)+'\\b','gi'),m=>{parts.push(m);return '[['+(parts.length-1)+']]'})});return{text:t,parts}}
+const unmask=(t,p)=>t.replace(/\[\[(\d+)\]\]/g,(m,n)=>p[+n]!==undefined?p[+n]:m);
+const wkey=t=>t.toLowerCase().replace(/[^\p{L}\p{N}\[\]]+/gu,' ').trim();
+async function punctuate(items){const out={};let batch=[],len=0;
+ const flush=async()=>{if(!batch.length)return;const r=await api('analyze',{payload:{task:'punctuate',items:batch}},90000);if(r.error)throw new Error(r.error);((r.result||{}).items||[]).forEach(o=>{out[String(o.n)]=String(o.text||'')});batch=[];len=0};
+ for(const it of items){if(len+it.text.length>5000)await flush();batch.push(it);len+=it.text.length}await flush();return out}
+async function punctLive(){const sel=S.lines.filter(l=>checked.has(l.id));if(!sel.length)return;
+ if(!S.aiOn||!S.sync.url)return toast('Turn on the AI helper and connect your sheet in Settings first.');
+ toast('Adding punctuation…');const masks={};const items=sel.map(l=>{masks[l.id]=maskNames(l.text);return{n:l.id,text:masks[l.id].text}});
+ try{const out=await punctuate(items),done={};
+  sel.forEach(l=>{const r=out[l.id],m=masks[l.id];if(r&&wkey(r)===wkey(m.text)){const u=unmask(r,m.parts);done[l.id]=u?u[0].toUpperCase()+u.slice(1):u}});
+  const ids=Object.keys(done);if(!ids.length)return toast('The AI could not add punctuation. Nothing was changed.');
+  const before={};S.lines.forEach(l=>{if(done[l.id])before[l.id]=[l.text,l.auto]});
+  S.lines.forEach(l=>{if(done[l.id]){l.text=done[l.id];delete l.auto}});checked=new Set();save();renderLive();
+  toast('Added punctuation to '+ids.length+' comment'+(ids.length>1?'s':'')+'.',()=>{S.lines.forEach(l=>{if(before[l.id]){l.text=before[l.id][0];if(before[l.id][1])l.auto=true}});save();renderLive()})}
+ catch(e){toast('AI: '+(e.message||'could not reach the AI helper.'))}}
+async function punctLesson(L){if(!S.aiOn||!S.sync.url)return toast('Turn on the AI helper and connect your sheet in Settings first.');
+ toast('Adding punctuation. This can take a moment.');
+ try{const out=await punctuate(L.seg.map((x,i)=>({n:String(i+1),text:x.t}))),before=JSON.stringify(L.seg);let n=0;
+  L.seg.forEach((x,i)=>{const r=out[String(i+1)];if(r&&r!==x.t&&wkey(r)===wkey(x.t)){x.t=r;delete x.auto;n++}});
+  if(!n)return toast('Nothing needed changing, or the AI could not add punctuation.');
+  save();render();toast('Punctuation added.',()=>{L.seg=JSON.parse(before);save();render()})}
+ catch(e){toast('AI: '+(e.message||'could not reach the AI helper.'))}}
+async function micTest(bar,msg){if(listening)stopMic();
+ try{const st=await navigator.mediaDevices.getUserMedia({audio:true}),ac=new(window.AudioContext||window.webkitAudioContext)(),an=ac.createAnalyser();an.fftSize=1024;ac.createMediaStreamSource(st).connect(an);
+  const buf=new Uint8Array(an.fftSize),t0=Date.now();let peak=0;msg.textContent='Say a sentence at your normal teaching volume…';
+  const tick=()=>{an.getByteTimeDomainData(buf);let m=0;for(const v of buf)m=Math.max(m,Math.abs(v-128));const lvl=Math.min(100,Math.round(m/128*150));peak=Math.max(peak,lvl);bar.style.width=lvl+'%';
+   if(Date.now()-t0<8000)requestAnimationFrame(tick);else{st.getTracks().forEach(x=>x.stop());ac.close();
+    msg.textContent=peak<15?'Very quiet. Move closer, raise the microphone volume in your device’s sound settings, or try a different microphone.':peak<35?'A little quiet. Try moving closer or raising the input volume.':peak>92?'Very loud and it may be distorting. Lower the input volume or move back a little.':'Good level.'}};tick()}
+ catch(e){msg.textContent='Could not open the microphone. Allow it in the address bar.'}}
+function speechCard(){const bar=h('div',{style:'height:100%;width:0;background:var(--acc)'}),msg=h('p',{class:'note',role:'status'},'');
+ return h('div',{class:'card'},h('h2',{},'Speech and microphone'),
+  osel('Speech language',[['en-CA','English (Canada)'],['en-US','English (United States)'],['en-GB','English (United Kingdom)'],['fr-CA','French (Canada)'],['','Browser default']],S.lang==null?'en-CA':S.lang,v=>{S.lang=v;save();toast('Applies the next time you start listening.')}),
+  h('label',{style:'display:block;margin-top:10px'},h('input',{type:'checkbox',checked:S.tidy!==false?'':null,onchange:e=>{S.tidy=e.target.checked;save()}}),' Tidy as I speak: capital letters and full stops or question marks'),
+  h('label',{style:'display:block;margin-top:4px'},h('input',{type:'checkbox',checked:S.spokenPunct?'':null,onchange:e=>{S.spokenPunct=e.target.checked;save()}}),' Spoken punctuation: say “comma”, “period” or “question mark” (these words are also changed when used in a sentence)'),
+  h('h3',{},'Fix common mistakes'),h('p',{class:'note'},'One per line: what it wrote = what you said. For example: tent frames = ten frames'),
+  h('textarea',{'aria-label':'Fix common mistakes',style:'min-height:90px',onchange:e=>{S.fixes=e.target.value;save()}},S.fixes||''),
+  h('h3',{},'Microphone check'),h('div',{style:'height:14px;background:#E6ECEF;border-radius:6px;overflow:hidden;margin:6px 0'},bar),
+  h('button',{class:'btn',onclick:()=>micTest(bar,msg)},'Test my microphone (8 seconds)'),msg,
+  h('p',{class:'note'},'The app can’t make the microphone more sensitive. Raise the input volume in your device’s sound settings, use a headset or clip-on microphone close to your mouth, and choose the right microphone in the browser’s microphone setting (the icon in the address bar).'))}
 /* ---------- change the subject of comments ---------- */
 const setSubject=v=>bulk('Moved '+checked.size+' comment'+(checked.size>1?'s':'')+' to '+v+'.',sel=>sel.forEach(l=>{l.subject=v;l.strand=undefined}));
 function lblEditor(ed){const ls=S.lines.filter(l=>ed.ids.includes(l.id)),f=ls[0];if(!f)return null;
