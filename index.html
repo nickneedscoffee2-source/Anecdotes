@@ -66,6 +66,12 @@ header select{background:#22333F;border:1px solid #3A4E5C;color:#fff;border-radi
 .ck{margin-top:6px;width:18px;height:18px;flex:none}.bulkp{background:var(--accbg);border-radius:12px;padding:10px 12px;margin:8px 0 12px}#bulk{margin-bottom:6px}
 .icon{border:0;background:none;color:var(--mute);cursor:pointer;padding:6px;border-radius:8px;flex:none;display:inline-flex;align-self:flex-start}.icon:hover{background:#FBE3E3;color:var(--rec)}
 @media print{header,nav,.noprint{display:none!important}body{background:#fff}}
+.gridwrap{overflow-x:auto}.tg{border-collapse:collapse;width:100%;min-width:420px}.tg th,.tg td{border:1px solid var(--line);padding:4px;text-align:center}.tg th{background:#F4F7F8;font-size:13px}.tg td.cr{text-align:left;padding:6px 8px;min-width:130px}
+.cell{width:100%;min-width:52px;height:44px;border:2px solid var(--line);background:#fff;border-radius:8px;font:inherit;font-weight:700;font-size:18px;cursor:pointer}.cell:disabled{background:#F1F3F4;cursor:not-allowed;opacity:.5}
+.cellnote{width:100%;min-width:70px;border:1px solid var(--line);border-radius:6px;padding:4px;font:inherit;font-size:13px}
+.tkey{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}.tkey span{border-radius:999px;padding:2px 10px;font-size:13px;border:1px solid var(--line)}
+#printArea{display:none}.pblock{margin-bottom:26px;break-inside:avoid}.pt th,.pt td{border:1px solid #333!important;height:34px;color:#000}.pt{min-width:0}
+@media print{body.pr>*:not(#printArea){display:none!important}body.pr #printArea{display:block}body.pr{background:#fff}}
 </style></head><body>
 <header><div class="brand">Anecdotal assistant</div>
 <div id="ctx" style="display:flex;gap:8px;flex-wrap:wrap"></div>
@@ -73,6 +79,7 @@ header select{background:#22333F;border:1px solid #3A4E5C;color:#fff;border-radi
 <nav id="nav"></nav><main id="main"></main>
 <div id="tag"></div>
 <div id="toast"></div>
+<div id="printArea"></div>
 <script>
 const KEY='anecdotal-v1',$=s=>document.querySelector(s);
 const fresh=()=>({roster:[],lines:[],marks:{},items:{},ai:{},tomb:{},trackers:[],tracks:{},joinSec:8,grade:'',lmode:'dots',lessons:[],idYear:null,idLast:0,codes:{},n:0,sync:{url:'',key:''},aiOn:true,subject:'Language',strand:'',term:'',mode:'dots',hide:false});
@@ -130,7 +137,7 @@ function buildCtx(){normSubjects();if(!CURR[S.subject])S.subject='Other';if(S.st
 const meta=l=>[l.subject,l.strand,l.term].filter(Boolean).join(' · ');
 const grpMeta=ls=>[ls[0].term,[...new Set(ls.map(l=>l.strand).filter(Boolean))].join(', ')].filter(Boolean).join(' · ');
 const termOf=(sid,d,sub)=>{const l=S.lines.find(x=>x.date===d&&x.subject===sub&&x.students.includes(sid)&&x.term);return l?l.term:S.term};
-let view='live',selS=null,active=[],capturing=false,listening=false,rec=null,interim='',selIds=[],mapRange=0,pTerm='',fTerm='',fSub='',checked=new Set(),bulkTo=new Set(),rmP=null,lEdit=null,trSel='',trForm=null,trDate='',lessonOn=false,lessonMic=false,lessonSel=null,lHl=new Set(),lf={sub:'',strand:'',term:'',grade:'',from:'',to:''};
+let view='live',selS=null,active=[],capturing=false,listening=false,rec=null,interim='',selIds=[],mapRange=0,pTerm='',fTerm='',fSub='',checked=new Set(),bulkTo=new Set(),rmP=null,lEdit=null,trSel='',trForm=null,trDate='',trWk={},trCont=null,prDlg=null,lessonOn=false,lessonMic=false,lessonSel=null,lHl=new Set(),lf={sub:'',strand:'',term:'',grade:'',from:'',to:''};
 
 /* ---------- listening ---------- */
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -272,7 +279,7 @@ function vParent(m){
    osel('Student',S.roster.map(s=>[s.id,nm(s)]),sid,v=>{selS=v;render()}),
    osel('Period',[['','All terms']].concat(TERMS.map(t=>[t,t])),pTerm,v=>{pTerm=v;render()}),
    S.aiOn&&S.sync.url?h('button',{class:'btn pri',onclick:()=>summarizeParent(sid)},'Summarize by subject with AI'):null,
-   h('button',{class:'btn',onclick:()=>print()},'Print')),
+   h('button',{class:'btn',onclick:()=>print()},'Print this page'),S.trackers.some(t=>t.sid===sid)?h('button',{class:'btn',onclick:()=>doPrint(S.trackers.filter(t=>t.sid===sid),'done',0)},'Print trackers'):null),
   h('h2',{},nm(stu(sid))+' — '+(pTerm||'All terms')));
  const tc=trackerSummary(sid);if(tc)m.append(tc);
  if(!subs.length)return tc?null:m.append(empty('No conversations or comments for this student in this period yet.'));
@@ -342,7 +349,7 @@ function mergeState(L,R){const a=flat(L),b=flat(R),tomb={},o={roster:[],lines:[]
  o.idLast=Math.max(L.idLast||0,R.idLast||0);if((R.idLast||0)<o.idLast)need=true;o.idYear=L.idYear||R.idYear||null;if(!R.idYear&&o.idYear)need=true;
  o.tomb=tomb;o.needPush=need;o.remoteNew=remote;return o}
 function applyMerged(m){S.roster=m.roster;S.lines=m.lines;S.lessons=m.lessons;S.items=m.items;S.marks=m.marks;S.ai=m.ai;S.trackers=m.trackers||[];S.tracks=m.tracks||{};S.tomb=m.tomb;S.idLast=m.idLast;S.idYear=m.idYear;
- normSubjects();S.h={};eachRec((t,r)=>{S.h[t]=recHash(r)});try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}
+ normSubjects();migrateTrackers();S.h={};eachRec((t,r)=>{S.h[t]=recHash(r)});try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}
  if(m.remoteNew&&!lessonOn&&!lEdit){if(view==='live')renderLive();else if(view!=='settings')render()}}
 async function syncNow(){
  if(!S.sync||!S.sync.url)return;if(syncBusy){syncAgain=true;return}
@@ -402,69 +409,151 @@ function syncCard(){const u=h('input',{placeholder:'Web app URL (ends in /exec)'
   h('p',{id:'syncmsg',class:'note',role:'status'},''),
   h('p',{class:'note'},'Only the web app URL and the passcode go here. The Gemini key stays in the Apps Script, never in this page. Phones and computers stay in step automatically: each device merges its changes with the sheet a few seconds after you make them, and again about every 30 seconds and whenever you return to the app. Please don\'t edit the app\'s tabs by hand in the sheet.'))}
 /* ---------- trackers ---------- */
+/* A tracker has criteria (rows) and is recorded daily (Mon to Fri columns), weekly (a column per week) or monthly (a column per month). */
 const PRESETS={'Rubric (4 levels)':['Not yet','Developing','Proficient','Extending'],'How often':['Never','Sometimes','Often','Always'],'How much help':['Needs support','Some support','Independent'],'Met or not met':['Not met','Met']};
 const LVC=['#F6DCC8','#F8EBB9','#D5EBCB','#9ED6BD','#52B0A6','#0E7C86'],lvColor=(n,i)=>LVC[n<2?5:Math.round(i*5/(n-1))];
+const ds=d=>d.toLocaleDateString('en-CA'),dt=s=>new Date(s+'T12:00'),addD=(s,n)=>{const d=dt(s);d.setDate(d.getDate()+n);return ds(d)},
+ mon=s=>{const d=dt(s);d.setDate(d.getDate()-(d.getDay()+6)%7);return ds(d)},addM=(s,n)=>{const d=dt(s);d.setMonth(d.getMonth()+n,1);return ds(d)};
+const termOfDate=s=>{const m=dt(s).getMonth();return m===10||m===11||m===0?'Term 1':(m>=1&&m<=5?'Term 2':'Progress')};
+const RANGES=['Progress','Term 1','Term 2','All year','Choose dates'],FREQ={daily:'Daily',weekly:'Weekly',monthly:'Monthly'};
+function termRange(name){const y=schoolYear(),Y=String(y),Z=String(y+1);
+ return name==='Progress'?[Y+'-09-01',Y+'-10-31']:name==='Term 1'?[Y+'-11-01',Z+'-01-31']:name==='Term 2'?[Z+'-02-01',Z+'-06-30']:[Y+'-09-01',Z+'-06-30']}
+function fixRange(name,s0,e0){if(name==='Choose dates')return[s0,e0];const r=termRange(name),t=day();return[t>r[0]&&t<=r[1]?t:r[0],r[1]]}
+const rangeText=T=>fd(T.start)+' to '+fd(T.end)+(T.rng&&T.rng!=='Choose dates'?' ('+T.rng+')':'');
+function trState(T){if(T.status==='stopped')return'stopped';const t=day();if(t>T.end)return'ended';if(addD(t,7)>=T.end)return'ending';return'active'}
 const symOf=(T,v)=>v===''||v==null?'':T.type==='check'?(v==='y'?'✓':'✗'):String(+v+1);
 const lblOf=(T,v)=>T.type==='check'?(v==='y'?'Done':v==='n'?'Not yet':''):(((T.levels||[])[+v]||{}).label||'');
-function setTrack(tid,date,v,note){const k=tid+'|'+date,cur=S.tracks[k]||{},nv=v===undefined?(cur.v||''):(cur.v===v?'':v),nn=note===undefined?(cur.note||''):note;
- if(!nv&&!nn)delete S.tracks[k];else S.tracks[k]={tid,date,v:nv,note:nn,term:cur.term||S.term};save();render()}
-function delTracker(id){const T=S.trackers.find(x=>x.id===id);if(!T||!confirm('Delete the tracker “'+T.name+'” and everything recorded on it?'))return;
+function nextVal(T,v){if(T.type==='check')return v===''?'y':v==='y'?'n':'';const n=(T.levels||[]).length;return v===''?'0':(+v+1<n?String(+v+1):'')}
+function cellStyle(T,v){if(v==='')return'';if(T.type==='check')return'background:'+(v==='y'?'#DDF3E6':'#FBE3E3')+';border-color:'+(v==='y'?'#1F8A4C':'#C93434');
+ const c=lvColor((T.levels||[]).length,+v);return'background:'+c+';border-color:var(--ink)'+(c==='#0E7C86'?';color:#fff':'')}
+function migrateTrackers(){let ch=false;
+ S.trackers.forEach(t=>{if(!t.criteria){t.criteria=[{id:'c1',label:t.name}];ch=true}if(!t.freq){t.freq='daily';ch=true}if(!t.status){t.status='active';ch=true}
+  if(!t.rng){const r=termRange('All year');t.rng='All year';t.start=t.created&&t.created<r[0]?t.created:r[0];t.end=r[1];ch=true}});
+ Object.keys(S.tracks).forEach(k=>{const e=S.tracks[k];if(e.cid)return;const T=S.trackers.find(t=>t.id===e.tid);e.cid=T?T.criteria[0].id:'c1';delete S.tracks[k];S.tracks[e.tid+'|'+e.cid+'|'+e.date]=e;ch=true});
+ return ch}
+function setTrack(tid,cid,date,v,note){const k=tid+'|'+cid+'|'+date,cur=S.tracks[k]||{},nv=v===undefined?(cur.v||''):v,nn=note===undefined?(cur.note||''):note;
+ if(!nv&&!nn)delete S.tracks[k];else S.tracks[k]={tid,cid,date,v:nv,note:nn,term:cur.term||termOfDate(date)};save();render()}
+function delTracker(id){const T=S.trackers.find(x=>x.id===id);if(!T||!confirm('Delete the tracker “'+T.name+'” and everything recorded on it? (To keep the results, use Stop tracking instead.)'))return;
  S.trackers=S.trackers.filter(x=>x.id!==id);for(const k in S.tracks)if(S.tracks[k].tid===id)delete S.tracks[k];save();render()}
-function trSummary(T,term){const es=Object.values(S.tracks).filter(e=>e.tid===T.id&&e.v!==''&&(!term||e.term===term)).sort((a,b)=>a.date.localeCompare(b.date));
- if(!es.length)return 'No entries yet.';
- if(T.type==='check'){const y=es.filter(e=>e.v==='y').length;return '✓ '+y+' · ✗ '+(es.length-y)+' · '+Math.round(y*100/es.length)+'% completed ('+es.length+' days recorded)'}
- const c={};es.forEach(e=>{const l=lblOf(T,e.v);c[l]=(c[l]||0)+1});const last=es[es.length-1];
- return 'Most recent: '+lblOf(T,last.v)+' ('+fd(last.date)+'). '+(T.levels||[]).map(l=>c[l.label]?l.label+' '+c[l.label]:null).filter(Boolean).join(' · ')}
-function trkButtons(T,date){const cur=(S.tracks[T.id+'|'+date]||{}).v||'',n=(T.levels||[]).length,
- opts=T.type==='check'?[['y','✓ Done','#DDF3E6'],['n','✗ Not yet','#FBE3E3']]:(T.levels||[]).map((l,i)=>[String(i),l.label,lvColor(n,i)]);
- return h('div',{class:'row',style:'flex-wrap:wrap;align-items:center'},opts.map(([v,lab,col])=>h('button',{class:'tb'+(cur===v?' on':''),'aria-pressed':cur===v,style:cur===v?'background:'+col+(col==='#0E7C86'?';color:#fff':''):'border-bottom:5px solid '+col,onclick:()=>setTrack(T.id,date,v)},lab)),
-  cur?h('button',{class:'btn sm',onclick:()=>setTrack(T.id,date,cur)},'Clear'):null)}
-function trkHist(T,n){const es=Object.values(S.tracks).filter(e=>e.tid===T.id&&e.v!=='').sort((a,b)=>b.date.localeCompare(a.date)).slice(0,n||10);
- return es.length?h('div',{class:'chips',style:'margin-top:8px'},es.map(e=>h('button',{class:'chipx',title:lblOf(T,e.v)+(e.note?' — '+e.note:''),onclick:()=>{trDate=e.date;if(view==='trackers')render()}},fd(e.date)+' '+symOf(T,e.v)))):null}
-function trackerCard(T,date,full){const e=S.tracks[T.id+'|'+date]||{},note=h('input',{placeholder:'Note for '+fd(date)+' (optional)','aria-label':'Note',value:e.note||'',onkeydown:ev=>{if(ev.key==='Enter')setTrack(T.id,date,undefined,ev.target.value.trim())}});
+function stopTracker(id){const T=S.trackers.find(x=>x.id===id);if(!T||!confirm('Stop tracking these goals for '+nm(stu(T.sid))+'? Past results stay saved and can still be viewed and printed.'))return;
+ T.status='stopped';T.stoppedOn=day();trCont=null;save();render()}
+/* columns shown for a tracker: Mon to Fri of one week (daily), or every week / month so far (weekly, monthly) */
+const wkOf=T=>trWk[T.id]||mon(day()<T.start?T.start:day()>T.end?T.end:day());
+function trCols(T,anchor){const t=day();
+ if(T.freq==='daily')return[0,1,2,3,4].map(i=>{const k=addD(anchor,i);return{key:k,label:['Mon','Tue','Wed','Thu','Fri'][i],sub:fd(k),off:k>t||k<T.start||k>T.end}});
+ const last=T.end<t?T.end:t,a=[];
+ if(T.freq==='weekly')for(let m=mon(T.start);m<=mon(last);m=addD(m,7))a.push({key:m,label:'Week of',sub:fd(m),off:false});
+ else for(let m=T.start.slice(0,7)+'-01';m<=last;m=addM(m,1))a.push({key:m,label:dt(m).toLocaleDateString(undefined,{month:'short',year:'numeric'}),sub:'',off:false});
+ return a}
+function trkGrid(T,cols,mode){
+ const head=h('tr',{},h('th',{},''),cols.map(c=>h('th',{},c.label,h('div',{class:'note'},c.sub)))),
+ rows=(T.criteria||[]).map(c=>h('tr',{},h('td',{class:'cr'},c.label),cols.map(col=>{const v=(S.tracks[T.id+'|'+c.id+'|'+col.key]||{}).v||'';
+  if(mode==='edit')return h('td',{class:'tc'},h('button',{class:'cell',disabled:col.off?'':null,style:cellStyle(T,v),'aria-label':c.label+', '+(col.sub||col.label)+(v?', '+lblOf(T,v):', blank'),onclick:()=>setTrack(T.id,c.id,col.key,nextVal(T,v))},symOf(T,v)));
+  return h('td',{class:'tc'},mode==='done'?symOf(T,v):'')}))),
+ notes=h('tr',{},h('td',{class:'cr'},'Notes'),cols.map(col=>{const e=S.tracks[T.id+'|note|'+col.key]||{};
+  return h('td',{class:'tc'},mode==='edit'?h('input',{class:'cellnote','aria-label':'Note for '+(col.sub||col.label),value:e.note||'',disabled:col.off?'':null,onchange:ev=>setTrack(T.id,'note',col.key,'',ev.target.value.trim())}):(mode==='done'?(e.note||''):''))}));
+ return h('div',{class:'gridwrap'},h('table',{class:mode==='edit'?'tg':'tg pt'},head,rows,notes))}
+const keyEl=T=>h('div',{class:'tkey'},T.type==='check'?[h('span',{},'✓ Done'),h('span',{},'✗ Not yet'),h('span',{},'blank = not recorded')]:(T.levels||[]).map((l,i)=>h('span',{style:'background:'+lvColor(T.levels.length,i)+(i===T.levels.length-1&&T.levels.length>1?';color:#fff':'')},(i+1)+' = '+l.label)));
+function entriesOf(T,c,term){return Object.values(S.tracks).filter(e=>e.tid===T.id&&e.cid===c.id&&e.v!==''&&(!term||e.term===term)).sort((a,b)=>a.date.localeCompare(b.date))}
+function critSummary(T,c,term){const es=entriesOf(T,c,term);if(!es.length)return 'No results yet.';
+ if(T.type==='check'){const y=es.filter(e=>e.v==='y').length;return '✓ '+y+' · ✗ '+(es.length-y)+' · '+Math.round(y*100/es.length)+'% completed ('+es.length+' recorded)'}
+ const cnt={};es.forEach(e=>{const l=lblOf(T,e.v);cnt[l]=(cnt[l]||0)+1});const last=es[es.length-1];
+ return 'Most recent: '+lblOf(T,last.v)+' ('+fd(last.date)+'). '+(T.levels||[]).map(l=>cnt[l.label]?l.label+' '+cnt[l.label]:null).filter(Boolean).join(' · ')}
+function trackerCard(T,full){const st=trState(T),wk=wkOf(T),cols=trCols(T,wk),last=mon(T.end<day()?T.end:day()),tags=[T.category,FREQ[T.freq],rangeText(T)].filter(Boolean).join(' · ');
+ const nav=T.freq==='daily'?h('div',{class:'row noprint',style:'align-items:center;flex-wrap:wrap;margin:8px 0'},
+  h('button',{class:'btn sm',disabled:wk<=mon(T.start)?'':null,onclick:()=>{trWk[T.id]=addD(wk,-7);render()}},'‹ Previous week'),h('strong',{},'Week of '+fd(wk)),
+  h('button',{class:'btn sm',disabled:wk>=last?'':null,onclick:()=>{trWk[T.id]=addD(wk,7);render()}},'Next week ›'),h('button',{class:'btn sm',onclick:()=>{delete trWk[T.id];render()}},'This week')):null;
+ const banner=st==='stopped'?h('div',{class:'ai noprint',style:'background:#EEF1F3'},h('p',{style:'margin:8px 0'},'Stopped tracking'+(T.stoppedOn?' on '+fd(T.stoppedOn):'')+'. Results are saved.'),h('button',{class:'btn',onclick:()=>{trCont=T.id;render()}},'Start tracking again'))
+  :(st==='ended'||st==='ending')?h('div',{class:'ai noprint',style:'background:#FBEBCF'},h('p',{style:'margin:8px 0'},st==='ended'?'This tracking period ended on '+fd(T.end)+'.':'This tracking period ends on '+fd(T.end)+'.'),
+   h('div',{class:'row',style:'flex-wrap:wrap'},h('button',{class:'btn',onclick:()=>stopTracker(T.id)},'Stop tracking these goals'),h('button',{class:'btn pri',onclick:()=>{trCont=T.id;render()}},'Continue tracking'))):null;
  return h('div',{class:'card'},h('div',{class:'row',style:'justify-content:space-between;align-items:center;flex-wrap:wrap'},
-   h('h3',{style:'margin:0'},T.name,T.category?h('span',{class:'tag'},' · '+T.category):null),
-   full?h('span',{class:'noprint'},h('button',{class:'btn sm',onclick:()=>{trForm={id:T.id};render()}},'Edit'),' ',h('button',{class:'btn sm',style:'color:var(--rec)',onclick:()=>delTracker(T.id)},'Delete')):null),
-  T.goal?h('p',{class:'note',style:'margin:4px 0 8px'},'Goal: '+T.goal):null,
-  trkButtons(T,date),
-  h('div',{class:'row noprint',style:'margin-top:8px'},note,h('button',{class:'btn sm',onclick:()=>setTrack(T.id,date,undefined,note.value.trim())},'Save note')),
-  trkHist(T,10),h('p',{class:'note',style:'margin:8px 0 0'},trSummary(T)))}
+   h('h3',{style:'margin:0'},T.name),
+   full?h('span',{class:'noprint'},h('button',{class:'btn sm',onclick:()=>{prDlg={ids:[T.id],mode:'blank'};render()}},'Print'),' ',h('button',{class:'btn sm',onclick:()=>{trForm={id:T.id};render()}},'Edit'),' ',h('button',{class:'btn sm',style:'color:var(--rec)',onclick:()=>delTracker(T.id)},'Delete')):null),
+  h('p',{class:'note',style:'margin:2px 0 6px'},tags),T.goal?h('p',{style:'margin:0 0 6px'},'Goal: '+T.goal):null,
+  banner,trCont===T.id?contForm(T):null,nav,keyEl(T),
+  cols.length?trkGrid(T,cols,'edit'):h('p',{class:'note'},T.start>day()?'Tracking starts on '+fd(T.start)+'.':'Nothing to record yet.'),
+  h('p',{class:'note',style:'margin:4px 0 0'},'Tap a box to record a result. Tap again to change it, and again to clear it.'),
+  h('details',{style:'margin-top:8px'},h('summary',{},'Summary'),(T.criteria||[]).map(c=>h('p',{style:'margin:6px 0'},h('strong',{},c.label+': '),critSummary(T,c)))))}
+function rangeFields(init,startToo){let name=init.rng||'Term 1';
+ const s0=h('input',{type:'date',value:init.start||day()}),e0=h('input',{type:'date',value:init.end||''}),info=h('p',{class:'note'},''),
+ dates=h('div',{class:'row',style:'flex-wrap:wrap'},startToo?h('label',{class:'note'},'Starts ',s0):null,h('label',{class:'note'},'Ends ',e0));
+ const sync=()=>{dates.style.display=name==='Choose dates'?'flex':'none';const r=fixRange(name,s0.value,e0.value);info.textContent=name==='Choose dates'?'':fd(r[0])+' to '+fd(r[1])};
+ const sel=osel('Track for',RANGES.map(x=>[x,x]),name,v=>{name=v;sync()});sync();
+ return{el:h('div',{},sel,info,dates),get:()=>{const r=fixRange(name,s0.value,e0.value);return{rng:name,start:r[0],end:r[1]}}}}
+function contForm(T){const next=T.rng==='Progress'?'Term 1':T.rng==='Term 1'?'Term 2':'Choose dates',rf=rangeFields({rng:next,end:T.end},false);
+ return h('div',{class:'card noprint',style:'background:var(--accbg)'},h('h3',{style:'margin-top:0'},'Keep tracking “'+T.name+'”'),h('p',{class:'note'},'Same goals, same results history. Choose how long to keep tracking.'),rf.el,
+  h('div',{class:'row',style:'margin-top:10px'},h('button',{class:'btn pri',onclick:()=>{const r=rf.get();if(!r.end||r.end<day())return toast('Choose an end date that is today or later.');
+   T.rng=r.rng;T.end=r.end;T.status='active';delete T.stoppedOn;trCont=null;save();render()}},'Keep tracking'),h('button',{class:'btn',onclick:()=>{trCont=null;render()}},'Cancel')))}
 function trackerForm(sid){const T=trForm.id?S.trackers.find(x=>x.id===trForm.id):null,
- nameI=h('input',{placeholder:'Tracker name, for example “Uses full sentences”','aria-label':'Tracker name',value:T?T.name:''}),
+ nameI=h('input',{placeholder:'Tracker name, for example “Communication goals”','aria-label':'Tracker name',value:T?T.name:''}),
  cat=osel('Category',['Behaviour','Communication goal','Social-emotional','Work habits','Other'].map(x=>[x,x]),T?T.category:'Communication goal',()=>{}),
+ freq=osel('How often',[['daily','Daily (Mon to Fri)'],['weekly','Weekly'],['monthly','Monthly']],T?T.freq:'daily',()=>{}),
  goal=h('input',{placeholder:'Goal (optional)','aria-label':'Goal',value:T?T.goal||'':''}),
+ crTa=h('textarea',{'aria-label':'Things to track',placeholder:'One per line, for example:\nUses full sentences\nShares an idea with a partner',style:'min-height:90px'},(T?T.criteria.map(c=>c.label):[]).join('\n')),
  ta=h('textarea',{'aria-label':'Rubric levels',style:'min-height:110px'},(T&&T.type==='rubric'?T.levels.map(l=>l.label):PRESETS['Rubric (4 levels)']).join('\n')),
  preset=osel('Preset',[['','Start from a preset…']].concat(Object.keys(PRESETS).map(k=>[k,k])),'',v=>{if(PRESETS[v])ta.value=PRESETS[v].join('\n')}),
  box=h('div',{style:'margin-top:8px;display:'+((T?T.type:'check')==='rubric'?'block':'none')},h('p',{class:'note'},'One level per line, lowest to highest (2 to 6 levels). Rename them to match your own rubric.'),preset,ta),
- type=osel('Type',[['check','✓ / ✗ checkmarks'],['rubric','Rubric with my own levels']],T?T.type:'check',v=>{box.style.display=v==='rubric'?'block':'none'});
- const done=()=>{const name=nameI.value.trim();if(!name)return toast('Give the tracker a name.');let levels;
-  if(type.value==='rubric'){levels=ta.value.split('\n').map(x=>x.trim()).filter(Boolean).slice(0,6).map(label=>({label}));if(levels.length<2)return toast('A rubric needs at least 2 levels.')}
-  const f={name,category:cat.value,goal:goal.value.trim(),type:type.value,levels};
-  if(T)Object.assign(T,f);else S.trackers.push(Object.assign({id:uid(),sid,created:day()},f));trForm=null;save();render()};
+ type=osel('Scale',[['check','✓ / ✗ checkmarks'],['rubric','Rubric with my own levels']],T?T.type:'check',v=>{box.style.display=v==='rubric'?'block':'none'}),
+ rf=rangeFields(T?{rng:T.rng,start:T.start,end:T.end}:{rng:S.term==='Progress'||S.term==='Term 1'||S.term==='Term 2'?S.term:'Term 1'},true);
+ if(T)freq.disabled=true;
+ const done=()=>{const name=nameI.value.trim();if(!name)return toast('Give the tracker a name.');
+  const lines=crTa.value.split('\n').map(x=>x.trim()).filter(Boolean).slice(0,10);if(!lines.length)return toast('Add at least one thing to track.');
+  let levels;if(type.value==='rubric'){levels=ta.value.split('\n').map(x=>x.trim()).filter(Boolean).slice(0,6).map(label=>({label}));if(levels.length<2)return toast('A rubric needs at least 2 levels.')}
+  const r=rf.get();let start=r.start,end=r.end;
+  if(T&&r.rng===T.rng&&r.rng!=='Choose dates'){start=T.start;end=T.end}
+  if(!start||!end||end<start)return toast('Choose a start date and an end date, with the end after the start.');
+  if(!T&&end<day())return toast('That period has already passed. Choose another range or your own dates.');
+  const criteria=lines.map((label,i)=>({id:T&&T.criteria[i]?T.criteria[i].id:uid(),label}));
+  const f={name,category:cat.value,goal:goal.value.trim(),type:type.value,levels,criteria,rng:r.rng,start,end};
+  if(T){Object.assign(T,f);const ids=new Set(criteria.map(c=>c.id));for(const k in S.tracks){const e=S.tracks[k];if(e.tid===T.id&&e.cid!=='note'&&!ids.has(e.cid))delete S.tracks[k]}}
+  else S.trackers.push(Object.assign({id:uid(),sid,freq:freq.value,status:'active',created:day()},f));
+  trForm=null;save();render()};
  return h('div',{class:'card'},h('h2',{},T?'Edit tracker':'Make a tracker for '+nm(stu(sid))),
-  h('div',{style:'margin-bottom:8px'},nameI),h('div',{class:'row',style:'flex-wrap:wrap;margin-bottom:8px'},cat,type),h('div',{style:'margin-bottom:4px'},goal),box,
+  h('div',{style:'margin-bottom:8px'},nameI),h('div',{class:'row',style:'flex-wrap:wrap;margin-bottom:8px'},cat,freq,type),h('div',{style:'margin-bottom:8px'},goal),
+  h('p',{class:'note',style:'margin:0 0 4px'},'What will you track? These become the rows of the tracker.'),crTa,box,
+  h('h3',{},'How long?'),rf.el,T?h('p',{class:'note'},'How often can’t be changed after the tracker is made.'):null,
   h('div',{class:'row',style:'margin-top:12px'},h('button',{class:'btn pri',onclick:done},'Save tracker'),h('button',{class:'btn',onclick:()=>{trForm=null;render()}},'Cancel')))}
+/* printing: blank sheets to fill in by hand, or completed results */
+function printBlock(T,mode,n){const t=day();let tables=[];
+ if(T.freq==='daily'){const weeks=[];if(mode==='blank'){const w0=wkOf(T);for(let i=0;i<(n||1);i++)weeks.push(addD(w0,7*i))}else for(let m=mon(T.start);m<=mon(T.end<t?T.end:t);m=addD(m,7))weeks.push(m);
+  tables=weeks.map(m=>h('div',{style:'margin-top:10px;break-inside:avoid'},h('strong',{},'Week of '+fd(m)),trkGrid(T,trCols(T,m).map(c=>Object.assign({},c,{off:false})),mode)))}
+ else{let cols=trCols(T,null);
+  if(mode==='blank'){cols=[];const k=n||(T.freq==='weekly'?8:6),base=t<T.start?T.start:t;let m=T.freq==='weekly'?mon(base):base.slice(0,7)+'-01';
+   for(let i=0;i<k;i++){cols.push(T.freq==='weekly'?{key:m,label:'Week of',sub:fd(m)}:{key:m,label:dt(m).toLocaleDateString(undefined,{month:'short',year:'numeric'}),sub:''});m=T.freq==='weekly'?addD(m,7):addM(m,1)}}
+  tables=[trkGrid(T,cols,mode)]}
+ return h('div',{class:'pblock'},h('h2',{style:'margin:0'},nm(stu(T.sid))+' — '+T.name),h('p',{style:'margin:2px 0'},[T.category,FREQ[T.freq],rangeText(T)].filter(Boolean).join(' · ')),
+  T.goal?h('p',{style:'margin:2px 0'},'Goal: '+T.goal):null,keyEl(T),tables,mode==='done'?null:h('div',{style:'border:1px solid #333;height:60px;margin-top:12px;padding:4px'},'Comments:'),h('p',{style:'font-size:12px;margin:4px 0'},'Printed '+fd(t)))}
+function doPrint(list,mode,n){if(!list.length)return toast('No trackers to print.');
+ $('#printArea').replaceChildren(...list.map(T=>printBlock(T,mode,n)));document.body.classList.add('pr');prDlg=null;
+ setTimeout(()=>{print();setTimeout(()=>document.body.classList.remove('pr'),1500)},80)}
+if(window.addEventListener)window.addEventListener('afterprint',()=>document.body.classList.remove('pr'));
+function printDlg(){const d=prDlg,list=S.trackers.filter(t=>d.ids.includes(t.id)),num=h('input',{type:'number',min:1,max:40,value:'',style:'width:80px','aria-label':'How many'});
+ return h('div',{class:'card noprint',style:'background:var(--accbg)'},h('h3',{style:'margin-top:0'},'Print '+(list.length===1?list[0].name:list.length+' trackers')),
+  h('div',{class:'row',style:'flex-wrap:wrap;align-items:center'},osel('Print type',[['blank','Blank, to fill in by hand'],['done','Completed results']],d.mode,v=>{d.mode=v;render()}),
+   d.mode==='blank'?h('label',{class:'note'},'Weeks or months to include (optional) ',num):null),
+  h('div',{class:'row',style:'margin-top:10px'},h('button',{class:'btn pri',onclick:()=>doPrint(list,d.mode,+num.value||0)},'Print'),h('button',{class:'btn',onclick:()=>{prDlg=null;render()}},'Cancel')))}
 function vTrackers(m){
  if(!S.roster.length)return m.append(empty('Add your class list in Settings first.'));
  if(trSel&&!stu(trSel))trSel='';
- const date=trDate||day();
  m.append(h('div',{class:'card'},h('h2',{},'Trackers'),
   h('div',{class:'row',style:'flex-wrap:wrap;align-items:center'},
-   osel('Student',[['','All students']].concat(S.roster.map(s=>[s.id,nm(s)])),trSel,v=>{trSel=v;trForm=null;render()}),
-   h('label',{class:'note'},'Date ',h('input',{type:'date',value:date,onchange:e=>{trDate=e.target.value||'';render()}})),
-   h('button',{class:'btn pri',onclick:()=>{if(!trSel)return toast('Choose a student first.');trForm={};render()}},'Make a tracker')),
-  h('p',{class:'note'},'Tap a button to record the result for the date shown. Tap it again to clear it.')));
+   osel('Student',[['','All students']].concat(S.roster.map(s=>[s.id,nm(s)])),trSel,v=>{trSel=v;trForm=null;prDlg=null;render()}),
+   h('button',{class:'btn pri',onclick:()=>{if(!trSel)return toast('Choose a student first.');trForm={};prDlg=null;render()}},'Make a tracker'),
+   h('button',{class:'btn',onclick:()=>{const ids=S.trackers.filter(t=>(!trSel||t.sid===trSel)&&t.status!=='stopped').map(t=>t.id);if(!ids.length)return toast('No active trackers to print.');prDlg={ids,mode:'blank'};trForm=null;render()}},trSel?'Print this student’s trackers':'Print all trackers'))));
  if(trForm){const T=trForm.id&&S.trackers.find(x=>x.id===trForm.id),sid=T?T.sid:trSel;if(sid)m.append(trackerForm(sid))}
+ if(prDlg)m.append(printDlg());
  const stus=S.roster.filter(s=>(!trSel||s.id===trSel)&&S.trackers.some(t=>t.sid===s.id));
  if(!stus.length)return m.append(empty(trSel?'No trackers for this student yet. Press Make a tracker.':'No trackers yet. Choose a student and press Make a tracker.'));
- stus.forEach(s=>{m.append(h('h2',{style:'margin:16px 0 8px'},nm(s)));S.trackers.filter(t=>t.sid===s.id).forEach(t=>m.append(trackerCard(t,date,true)))})}
-function trackerPanel(sid){const ts=S.trackers.filter(t=>t.sid===sid);
- if(!ts.length)return h('div',{class:'card noprint'},h('h2',{},'Trackers'),h('p',{class:'note'},'No trackers for this student yet.'),h('button',{class:'btn',onclick:()=>{trSel=sid;trForm={};view='trackers';render()}},'Make a tracker'));
- return h('div',{},h('h2',{},'Trackers (today)'),ts.map(T=>trackerCard(T,day(),false)))}
+ stus.forEach(s=>{const all=S.trackers.filter(t=>t.sid===s.id),act=all.filter(t=>t.status!=='stopped'),old=all.filter(t=>t.status==='stopped');
+  m.append(h('h2',{style:'margin:16px 0 8px'},nm(s)));act.forEach(t=>m.append(trackerCard(t,true)));
+  if(old.length)m.append(h('details',{class:'card'},h('summary',{},'Stopped trackers ('+old.length+')'),old.map(t=>trackerCard(t,true))))})}
+function trackerPanel(sid){const ts=S.trackers.filter(t=>t.sid===sid&&t.status!=='stopped');
+ if(!ts.length)return h('div',{class:'card noprint'},h('h2',{},'Trackers'),h('p',{class:'note'},'No active trackers for this student.'),h('button',{class:'btn',onclick:()=>{trSel=sid;trForm={};view='trackers';render()}},'Make a tracker'));
+ return h('div',{},h('h2',{},'Trackers'),ts.map(T=>trackerCard(T,false)))}
 function trackerSummary(sid){const ts=S.trackers.filter(t=>t.sid===sid);if(!ts.length)return null;
- return h('div',{class:'card'},h('h2',{},'Goals and trackers'),ts.map(T=>h('div',{class:'item',style:'display:block'},h('strong',{},T.name),T.category?h('span',{class:'tag'},' · '+T.category):null,
-  T.goal?h('div',{class:'note'},'Goal: '+T.goal):null,h('div',{},trSummary(T,pTerm)),trkHist(T,8))))}
-/* ---------- remove a student from one comment ---------- */
+ return h('div',{class:'card'},h('h2',{},'Goals and trackers'),ts.map(T=>h('div',{class:'item',style:'display:block'},h('strong',{},T.name),h('span',{class:'tag'},' · '+[T.category,FREQ[T.freq],T.status==='stopped'?'stopped':rangeText(T)].filter(Boolean).join(' · ')),
+  T.goal?h('div',{class:'note'},'Goal: '+T.goal):null,(T.criteria||[]).map(c=>h('div',{style:'margin-top:4px'},h('strong',{},c.label+': '),critSummary(T,c,pTerm))))))}
+/* ---------- remove a student from one comment ---------- *//* ---------- remove a student from one comment ---------- */
 function whoRow(l){
  if(!l.students.length)return h('div',{class:'who'},h('button',{class:'btn sm',onclick:()=>{l.students=[...active];save();renderLive()}},'Assign to selected students'));
  const p=rmP&&rmP.id===l.id?rmP.sid:null;
@@ -636,7 +725,7 @@ function yearCard(){const yy=S.idYear||String(schoolYear()).slice(2),next='STU-'
   h('p',{},'Student numbers for this class look like STU-'+yy+'-001. The next new student gets '+next+'.'),
   h('button',{class:'btn',onclick:startNewYear},'Start new school year'),
   h('p',{class:'note'},'Downloads a copy of this year\'s notes, clears the app, and restarts numbering at 001. It does not touch your Google Sheet.'))}
-{const a=migrateIds(),b=normSubjects(),c=migrateCodes();delete S.ai.__codes;persist();if(a||b||c)queueSync()}
+{const a=migrateIds(),b=normSubjects(),c=migrateCodes(),d=migrateTrackers();delete S.ai.__codes;persist();if(a||b||c||d)queueSync()}
 render();
 if(S.sync&&S.sync.url)syncNow();
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&S.sync&&S.sync.url)syncNow()});
