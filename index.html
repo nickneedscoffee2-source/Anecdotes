@@ -62,6 +62,7 @@ svg text{font-size:13px;fill:var(--ink)}.note{color:var(--mute);font-size:14px}
 header select{background:#22333F;border:1px solid #3A4E5C;color:#fff;border-radius:10px;padding:8px 10px;font:inherit;max-width:200px}header select option{color:#14212B;background:#fff}
 #tag{flex-wrap:wrap;max-width:360px}.chipx{border:1px solid var(--line);background:#fff;border-radius:999px;padding:1px 9px;font:inherit;font-size:12px;cursor:pointer;margin:0 4px 2px 0}.chipx:hover,.chipx.on{background:#FBE3E3;border-color:var(--rec)}.rmq{display:inline-block;margin-left:4px;color:var(--ink)}
 .sg{padding:6px 8px;border-radius:8px;margin-bottom:4px}.sg.hl{background:#FFF3C4;outline:2px solid #E7C84A}.fb{display:block;width:100%;text-align:left;border:1px solid var(--line);background:#fff;border-radius:10px;padding:8px 12px;margin:0 0 6px;font:inherit;cursor:pointer}.fb:hover{border-color:var(--acc);background:var(--accbg)}
+.tb{border:2px solid var(--line);background:#fff;border-radius:10px;padding:8px 16px;font:inherit;font-weight:600;cursor:pointer;min-height:44px}.tb.on{border-color:var(--ink)}
 .ck{margin-top:6px;width:18px;height:18px;flex:none}.bulkp{background:var(--accbg);border-radius:12px;padding:10px 12px;margin:8px 0 12px}#bulk{margin-bottom:6px}
 .icon{border:0;background:none;color:var(--mute);cursor:pointer;padding:6px;border-radius:8px;flex:none;display:inline-flex;align-self:flex-start}.icon:hover{background:#FBE3E3;color:var(--rec)}
 @media print{header,nav,.noprint{display:none!important}body{background:#fff}}
@@ -74,7 +75,7 @@ header select{background:#22333F;border:1px solid #3A4E5C;color:#fff;border-radi
 <div id="toast"></div>
 <script>
 const KEY='anecdotal-v1',$=s=>document.querySelector(s);
-const fresh=()=>({roster:[],lines:[],marks:{},items:{},ai:{},tomb:{},joinSec:8,grade:'',lmode:'dots',lessons:[],idYear:null,idLast:0,codes:{},n:0,sync:{url:'',key:''},aiOn:true,subject:'Language',strand:'',term:'',mode:'dots',hide:false});
+const fresh=()=>({roster:[],lines:[],marks:{},items:{},ai:{},tomb:{},trackers:[],tracks:{},joinSec:8,grade:'',lmode:'dots',lessons:[],idYear:null,idLast:0,codes:{},n:0,sync:{url:'',key:''},aiOn:true,subject:'Language',strand:'',term:'',mode:'dots',hide:false});
 let syncT,syncing=false;
 let S;try{S=Object.assign(fresh(),JSON.parse(localStorage.getItem(KEY)))}catch(e){S=fresh()}
 const persist=()=>{try{stamp();localStorage.setItem(KEY,JSON.stringify(S))}catch(e){toast('Could not save on this device.')}};
@@ -83,7 +84,7 @@ const save=()=>{persist();queueSync()};
 const hsh=t=>{let x=5381;for(let i=0;i<t.length;i++)x=((x<<5)+x+t.charCodeAt(i))|0;return x.toString(36)};
 const recHash=r=>hsh(JSON.stringify(r,(k,v)=>k==='u'?undefined:v));
 function eachRec(fn){S.roster.forEach(r=>fn('st:'+r.id,r));S.lines.forEach(r=>fn('ln:'+r.id,r));S.lessons.forEach(r=>fn('ls:'+r.id,r));
- for(const sid in S.items)S.items[sid].forEach(r=>fn('it:'+r.id,r));for(const k in S.marks)if(S.marks[k])fn('mk:'+k,S.marks[k]);for(const k in S.ai)if(S.ai[k]&&typeof S.ai[k]==='object')fn('ai:'+k,S.ai[k])}
+ for(const sid in S.items)S.items[sid].forEach(r=>fn('it:'+r.id,r));for(const k in S.marks)if(S.marks[k])fn('mk:'+k,S.marks[k]);for(const k in S.ai)if(S.ai[k]&&typeof S.ai[k]==='object')fn('ai:'+k,S.ai[k]);S.trackers.forEach(r=>fn('tr:'+r.id,r));for(const k in S.tracks)fn('te:'+k,S.tracks[k])}
 function stamp(){const now=Date.now();S.tomb=S.tomb||{};
  if(!S.h){S.h={};eachRec((t,r)=>{S.h[t]=recHash(r)});return}
  const seen={};eachRec((t,r)=>{seen[t]=1;const x=recHash(r);if(S.h[t]!==x){S.h[t]=x;r.u=now}if(S.tomb[t])delete S.tomb[t]});
@@ -129,7 +130,7 @@ function buildCtx(){normSubjects();if(!CURR[S.subject])S.subject='Other';if(S.st
 const meta=l=>[l.subject,l.strand,l.term].filter(Boolean).join(' · ');
 const grpMeta=ls=>[ls[0].term,[...new Set(ls.map(l=>l.strand).filter(Boolean))].join(', ')].filter(Boolean).join(' · ');
 const termOf=(sid,d,sub)=>{const l=S.lines.find(x=>x.date===d&&x.subject===sub&&x.students.includes(sid)&&x.term);return l?l.term:S.term};
-let view='live',selS=null,active=[],capturing=false,listening=false,rec=null,interim='',selIds=[],mapRange=0,pTerm='',fTerm='',fSub='',checked=new Set(),bulkTo=new Set(),rmP=null,lEdit=null,lessonOn=false,lessonMic=false,lessonSel=null,lHl=new Set(),lf={sub:'',strand:'',term:'',grade:'',from:'',to:''};
+let view='live',selS=null,active=[],capturing=false,listening=false,rec=null,interim='',selIds=[],mapRange=0,pTerm='',fTerm='',fSub='',checked=new Set(),bulkTo=new Set(),rmP=null,lEdit=null,trSel='',trForm=null,trDate='',lessonOn=false,lessonMic=false,lessonSel=null,lHl=new Set(),lf={sub:'',strand:'',term:'',grade:'',from:'',to:''};
 
 /* ---------- listening ---------- */
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -164,10 +165,10 @@ function syncBar(){const m=$('#mic'),c=$('#cap');
  c.disabled=!listening||lessonOn;c.textContent=lessonOn?'Lesson recording…':capturing?'Capturing — tap to pause':'Paused — say “Soundgarden”';c.className='btn '+(capturing?'rec':'')}
 $('#cap').onclick=toggleCap;
 buildCtx();
-const NAV=[['live','Live'],['students','Students'],['parent','Parent call'],['lesson','Lesson Feedback'],['map','Map'],['settings','Settings']];
+const NAV=[['live','Live'],['students','Students'],['trackers','Trackers'],['parent','Parent call'],['lesson','Lesson Feedback'],['map','Map'],['settings','Settings']];
 NAV.forEach(([v,l])=>$('#nav').append(h('button',{dataset:{v},onclick:()=>{view=v;render()}},l)));
 function render(){document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===view));
- const m=$('#main');m.replaceChildren();if(newYearDue())m.append(yearBanner());({live:vLive,students:vStudents,parent:vParent,lesson:vLesson,map:vMap,settings:vSettings})[view](m);syncBar()}
+ const m=$('#main');m.replaceChildren();if(newYearDue())m.append(yearBanner());({live:vLive,students:vStudents,trackers:vTrackers,parent:vParent,lesson:vLesson,map:vMap,settings:vSettings})[view](m);syncBar()}
 
 /* ---------- live ---------- */
 function vLive(m){
@@ -227,6 +228,7 @@ function detail(sid){
    h('div',{class:'seg'},[['dots','Dot jots'],['full','Full text']].map(([k,l])=>h('button',{class:S.mode===k?'on':'',onclick:()=>{S.mode=k;save();render()}},l)))),
    h('div',{class:'row noprint',style:'margin-top:10px'},osel('Filter by period',[['','All periods']].concat(TERMS.map(t=>[t,t])),fTerm,v=>{fTerm=v;render()}),osel('Filter by subject',[['','All subjects']].concat(SUBJ.map(t=>[t,t])),fSub,v=>{fSub=v;render()})),h('h3',{},'Anecdotal comments'),h('div',{class:'row',style:'flex-wrap:wrap'},type,subSel,inp,h('button',{class:'btn pri',onclick:()=>addItem(sid,type.value,inp.value,subSel.value,S.term)},'Add')),
    Object.keys(TYPES).map(k=>items.filter(i=>i.type===k).length?h('div',{},h('h3',{},TYPES[k]),items.filter(i=>i.type===k).map(itemRow)):null)),
+  trackerPanel(sid),
   Object.keys(g).sort().reverse().map(key=>{const[d,sub]=key.split('|'),ls=g[key];
    return h('div',{class:'card'},h('div',{class:'row',style:'align-items:center;justify-content:space-between'},h('h2',{style:'margin:0'},fd(d)+' · '+sub+(grpMeta(ls)?' · '+grpMeta(ls):'')),S.aiOn&&S.sync.url?h('button',{class:'btn sm noprint',onclick:()=>analyze(sid,d,sub,false)},S.ai[sid+'|'+d+'|'+sub]?'Re-run AI':'Analyze with AI'):null),marksRow(sid,d,sub,ls),h('p',{class:'note'},'Outlined dots are suggestions. Tap to confirm.'),aiPanel(sid,d,sub),
     ls.map(l=>h('div',{class:'ent'},h('span',{class:'b '+l.who},spk(l)),
@@ -272,7 +274,8 @@ function vParent(m){
    S.aiOn&&S.sync.url?h('button',{class:'btn pri',onclick:()=>summarizeParent(sid)},'Summarize by subject with AI'):null,
    h('button',{class:'btn',onclick:()=>print()},'Print')),
   h('h2',{},nm(stu(sid))+' — '+(pTerm||'All terms')));
- if(!subs.length)return m.append(empty('No conversations or comments for this student in this period yet.'));
+ const tc=trackerSummary(sid);if(tc)m.append(tc);
+ if(!subs.length)return tc?null:m.append(empty('No conversations or comments for this student in this period yet.'));
  subs.forEach(sub=>{const p=pItems(sid,sub,bySub[sub]);
   m.append(h('div',{class:'card'},h('h2',{},sub),p.sum?h('div',{class:'ai'},h('h3',{},'Talking points'),h('p',{},p.sum)):null,
    h('div',{class:'cols'},colBox('Strengths','',p.st,'S',sid,sub),colBox('Next steps','n',p.nx,'N',sid,sub))))})}
@@ -321,14 +324,14 @@ const setSync=t=>{$('#sync').textContent=t;const m=$('#syncmsg');if(m)m.textCont
 let syncBusy=false,syncAgain=false,lastRev=null;
 const clock=()=>new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
 function queueSync(){if(syncing||!S.sync||!S.sync.url)return;if(syncBusy){syncAgain=true;return}clearTimeout(syncT);syncT=setTimeout(syncNow,4000)}
-const wire=()=>({roster:S.roster,lines:S.lines,lessons:S.lessons,items:S.items,marks:S.marks,ai:S.ai,tomb:S.tomb,idYear:S.idYear,idLast:S.idLast});
+const wire=()=>({trackers:S.trackers,tracks:S.tracks,roster:S.roster,lines:S.lines,lessons:S.lessons,items:S.items,marks:S.marks,ai:S.ai,tomb:S.tomb,idYear:S.idYear,idLast:S.idLast});
 function flat(s){const m={};(s.roster||[]).forEach(r=>m['st:'+r.id]={k:'st',rec:r});(s.lines||[]).forEach(r=>m['ln:'+r.id]={k:'ln',rec:r});(s.lessons||[]).forEach(r=>m['ls:'+r.id]={k:'ls',rec:r});
  for(const sid in s.items||{})(s.items[sid]||[]).forEach(r=>m['it:'+r.id]={k:'it',sid,rec:r});
- for(const k in s.marks||{})m['mk:'+k]={k:'mk',key:k,rec:s.marks[k]};for(const k in s.ai||{})m['ai:'+k]={k:'ai',key:k,rec:s.ai[k]};return m}
+ for(const k in s.marks||{})m['mk:'+k]={k:'mk',key:k,rec:s.marks[k]};for(const k in s.ai||{})m['ai:'+k]={k:'ai',key:k,rec:s.ai[k]};(s.trackers||[]).forEach(r=>m['tr:'+r.id]={k:'tr',rec:r});for(const k in s.tracks||{})m['te:'+k]={k:'te',key:k,rec:s.tracks[k]};return m}
 function place(o,p){const r=p.rec;if(p.k==='st')o.roster.push(r);else if(p.k==='ln')o.lines.push(r);else if(p.k==='ls')o.lessons.push(r);
- else if(p.k==='it')(o.items[p.sid]=o.items[p.sid]||[]).push(r);else if(p.k==='mk')o.marks[p.key]=r;else o.ai[p.key]=r}
+ else if(p.k==='it')(o.items[p.sid]=o.items[p.sid]||[]).push(r);else if(p.k==='mk')o.marks[p.key]=r;else if(p.k==='tr')o.trackers.push(r);else if(p.k==='te')o.tracks[p.key]=r;else o.ai[p.key]=r}
 /* merge two copies record by record: the most recently changed copy wins; a deletion beats an older copy */
-function mergeState(L,R){const a=flat(L),b=flat(R),tomb={},o={roster:[],lines:[],lessons:[],items:{},marks:{},ai:{}};let need=false,remote=false;
+function mergeState(L,R){const a=flat(L),b=flat(R),tomb={},o={roster:[],lines:[],lessons:[],items:{},marks:{},ai:{},trackers:[],tracks:{}};let need=false,remote=false;
  const lt=L.tomb||{},rt=R.tomb||{},cut=Date.now()-180*864e5,U=r=>r.u||0;
  new Set([...Object.keys(lt),...Object.keys(rt)]).forEach(t=>{const u=Math.max(lt[t]||0,rt[t]||0);if(u>cut){tomb[t]=u;if((rt[t]||0)<u)need=true}});
  new Set([...Object.keys(a),...Object.keys(b)]).forEach(t=>{const x=a[t],y=b[t],p=!y?x:!x?y:(U(x.rec)>U(y.rec)?x:y);
@@ -338,7 +341,7 @@ function mergeState(L,R){const a=flat(L),b=flat(R),tomb={},o={roster:[],lines:[]
  o.roster.sort((p,q)=>String(p.id).localeCompare(String(q.id)));o.lines.sort((p,q)=>(p.ts||0)-(q.ts||0));
  o.idLast=Math.max(L.idLast||0,R.idLast||0);if((R.idLast||0)<o.idLast)need=true;o.idYear=L.idYear||R.idYear||null;if(!R.idYear&&o.idYear)need=true;
  o.tomb=tomb;o.needPush=need;o.remoteNew=remote;return o}
-function applyMerged(m){S.roster=m.roster;S.lines=m.lines;S.lessons=m.lessons;S.items=m.items;S.marks=m.marks;S.ai=m.ai;S.tomb=m.tomb;S.idLast=m.idLast;S.idYear=m.idYear;
+function applyMerged(m){S.roster=m.roster;S.lines=m.lines;S.lessons=m.lessons;S.items=m.items;S.marks=m.marks;S.ai=m.ai;S.trackers=m.trackers||[];S.tracks=m.tracks||{};S.tomb=m.tomb;S.idLast=m.idLast;S.idYear=m.idYear;
  normSubjects();S.h={};eachRec((t,r)=>{S.h[t]=recHash(r)});try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}
  if(m.remoteNew&&!lessonOn&&!lEdit){if(view==='live')renderLive();else if(view!=='settings')render()}}
 async function syncNow(){
@@ -358,7 +361,7 @@ async function syncNow(){
  finally{syncBusy=false;if(syncAgain){syncAgain=false;queueSync()}}}
 async function loadReplace(){if(!S.sync.url)return toast('Add the web app URL in Settings first.');setSync('Loading…');
  try{const r=await api('pull');if(r.error){setSync('Sheet error: '+r.error);return}const st=r.state||{};
-  applyMerged({roster:st.roster||[],lines:st.lines||[],lessons:st.lessons||[],items:st.items||{},marks:st.marks||{},ai:st.ai||{},tomb:st.tomb||{},idLast:st.idLast||0,idYear:st.idYear||null,remoteNew:false});
+  applyMerged({roster:st.roster||[],lines:st.lines||[],lessons:st.lessons||[],items:st.items||{},marks:st.marks||{},ai:st.ai||{},trackers:st.trackers||[],tracks:st.tracks||{},tomb:st.tomb||{},idLast:st.idLast||0,idYear:st.idYear||null,remoteNew:false});
   lastRev=r.rev;setSync('Loaded from sheet '+clock());render()}catch(e){setSync(netMsg(e))}}
 async function forcePush(){if(!S.sync.url)return toast('Add the web app URL in Settings first.');setSync('Saving…');
  try{const w=await api('push',{state:wire(),force:true});setSync(w.error?'Sheet error: '+w.error:'Sheet replaced '+clock());if(w.rev)lastRev=w.rev}catch(e){setSync(netMsg(e))}}
@@ -398,6 +401,69 @@ function syncCard(){const u=h('input',{placeholder:'Web app URL (ends in /exec)'
    h('button',{class:'btn',onclick:syncNow},'Sync now'),h('button',{class:'btn',onclick:()=>confirm('Replace everything on this device with what is in the sheet?')&&loadReplace()},'Replace this device with the sheet'),h('button',{class:'btn',onclick:()=>confirm('Replace everything in the sheet with what is on this device? Use this only if the sheet has the wrong data.')&&forcePush()},'Replace the sheet with this device')),
   h('p',{id:'syncmsg',class:'note',role:'status'},''),
   h('p',{class:'note'},'Only the web app URL and the passcode go here. The Gemini key stays in the Apps Script, never in this page. Phones and computers stay in step automatically: each device merges its changes with the sheet a few seconds after you make them, and again about every 30 seconds and whenever you return to the app. Please don\'t edit the app\'s tabs by hand in the sheet.'))}
+/* ---------- trackers ---------- */
+const PRESETS={'Rubric (4 levels)':['Not yet','Developing','Proficient','Extending'],'How often':['Never','Sometimes','Often','Always'],'How much help':['Needs support','Some support','Independent'],'Met or not met':['Not met','Met']};
+const LVC=['#F6DCC8','#F8EBB9','#D5EBCB','#9ED6BD','#52B0A6','#0E7C86'],lvColor=(n,i)=>LVC[n<2?5:Math.round(i*5/(n-1))];
+const symOf=(T,v)=>v===''||v==null?'':T.type==='check'?(v==='y'?'✓':'✗'):String(+v+1);
+const lblOf=(T,v)=>T.type==='check'?(v==='y'?'Done':v==='n'?'Not yet':''):(((T.levels||[])[+v]||{}).label||'');
+function setTrack(tid,date,v,note){const k=tid+'|'+date,cur=S.tracks[k]||{},nv=v===undefined?(cur.v||''):(cur.v===v?'':v),nn=note===undefined?(cur.note||''):note;
+ if(!nv&&!nn)delete S.tracks[k];else S.tracks[k]={tid,date,v:nv,note:nn,term:cur.term||S.term};save();render()}
+function delTracker(id){const T=S.trackers.find(x=>x.id===id);if(!T||!confirm('Delete the tracker “'+T.name+'” and everything recorded on it?'))return;
+ S.trackers=S.trackers.filter(x=>x.id!==id);for(const k in S.tracks)if(S.tracks[k].tid===id)delete S.tracks[k];save();render()}
+function trSummary(T,term){const es=Object.values(S.tracks).filter(e=>e.tid===T.id&&e.v!==''&&(!term||e.term===term)).sort((a,b)=>a.date.localeCompare(b.date));
+ if(!es.length)return 'No entries yet.';
+ if(T.type==='check'){const y=es.filter(e=>e.v==='y').length;return '✓ '+y+' · ✗ '+(es.length-y)+' · '+Math.round(y*100/es.length)+'% completed ('+es.length+' days recorded)'}
+ const c={};es.forEach(e=>{const l=lblOf(T,e.v);c[l]=(c[l]||0)+1});const last=es[es.length-1];
+ return 'Most recent: '+lblOf(T,last.v)+' ('+fd(last.date)+'). '+(T.levels||[]).map(l=>c[l.label]?l.label+' '+c[l.label]:null).filter(Boolean).join(' · ')}
+function trkButtons(T,date){const cur=(S.tracks[T.id+'|'+date]||{}).v||'',n=(T.levels||[]).length,
+ opts=T.type==='check'?[['y','✓ Done','#DDF3E6'],['n','✗ Not yet','#FBE3E3']]:(T.levels||[]).map((l,i)=>[String(i),l.label,lvColor(n,i)]);
+ return h('div',{class:'row',style:'flex-wrap:wrap;align-items:center'},opts.map(([v,lab,col])=>h('button',{class:'tb'+(cur===v?' on':''),'aria-pressed':cur===v,style:cur===v?'background:'+col+(col==='#0E7C86'?';color:#fff':''):'border-bottom:5px solid '+col,onclick:()=>setTrack(T.id,date,v)},lab)),
+  cur?h('button',{class:'btn sm',onclick:()=>setTrack(T.id,date,cur)},'Clear'):null)}
+function trkHist(T,n){const es=Object.values(S.tracks).filter(e=>e.tid===T.id&&e.v!=='').sort((a,b)=>b.date.localeCompare(a.date)).slice(0,n||10);
+ return es.length?h('div',{class:'chips',style:'margin-top:8px'},es.map(e=>h('button',{class:'chipx',title:lblOf(T,e.v)+(e.note?' — '+e.note:''),onclick:()=>{trDate=e.date;if(view==='trackers')render()}},fd(e.date)+' '+symOf(T,e.v)))):null}
+function trackerCard(T,date,full){const e=S.tracks[T.id+'|'+date]||{},note=h('input',{placeholder:'Note for '+fd(date)+' (optional)','aria-label':'Note',value:e.note||'',onkeydown:ev=>{if(ev.key==='Enter')setTrack(T.id,date,undefined,ev.target.value.trim())}});
+ return h('div',{class:'card'},h('div',{class:'row',style:'justify-content:space-between;align-items:center;flex-wrap:wrap'},
+   h('h3',{style:'margin:0'},T.name,T.category?h('span',{class:'tag'},' · '+T.category):null),
+   full?h('span',{class:'noprint'},h('button',{class:'btn sm',onclick:()=>{trForm={id:T.id};render()}},'Edit'),' ',h('button',{class:'btn sm',style:'color:var(--rec)',onclick:()=>delTracker(T.id)},'Delete')):null),
+  T.goal?h('p',{class:'note',style:'margin:4px 0 8px'},'Goal: '+T.goal):null,
+  trkButtons(T,date),
+  h('div',{class:'row noprint',style:'margin-top:8px'},note,h('button',{class:'btn sm',onclick:()=>setTrack(T.id,date,undefined,note.value.trim())},'Save note')),
+  trkHist(T,10),h('p',{class:'note',style:'margin:8px 0 0'},trSummary(T)))}
+function trackerForm(sid){const T=trForm.id?S.trackers.find(x=>x.id===trForm.id):null,
+ nameI=h('input',{placeholder:'Tracker name, for example “Uses full sentences”','aria-label':'Tracker name',value:T?T.name:''}),
+ cat=osel('Category',['Behaviour','Communication goal','Social-emotional','Work habits','Other'].map(x=>[x,x]),T?T.category:'Communication goal',()=>{}),
+ goal=h('input',{placeholder:'Goal (optional)','aria-label':'Goal',value:T?T.goal||'':''}),
+ ta=h('textarea',{'aria-label':'Rubric levels',style:'min-height:110px'},(T&&T.type==='rubric'?T.levels.map(l=>l.label):PRESETS['Rubric (4 levels)']).join('\n')),
+ preset=osel('Preset',[['','Start from a preset…']].concat(Object.keys(PRESETS).map(k=>[k,k])),'',v=>{if(PRESETS[v])ta.value=PRESETS[v].join('\n')}),
+ box=h('div',{style:'margin-top:8px;display:'+((T?T.type:'check')==='rubric'?'block':'none')},h('p',{class:'note'},'One level per line, lowest to highest (2 to 6 levels). Rename them to match your own rubric.'),preset,ta),
+ type=osel('Type',[['check','✓ / ✗ checkmarks'],['rubric','Rubric with my own levels']],T?T.type:'check',v=>{box.style.display=v==='rubric'?'block':'none'});
+ const done=()=>{const name=nameI.value.trim();if(!name)return toast('Give the tracker a name.');let levels;
+  if(type.value==='rubric'){levels=ta.value.split('\n').map(x=>x.trim()).filter(Boolean).slice(0,6).map(label=>({label}));if(levels.length<2)return toast('A rubric needs at least 2 levels.')}
+  const f={name,category:cat.value,goal:goal.value.trim(),type:type.value,levels};
+  if(T)Object.assign(T,f);else S.trackers.push(Object.assign({id:uid(),sid,created:day()},f));trForm=null;save();render()};
+ return h('div',{class:'card'},h('h2',{},T?'Edit tracker':'Make a tracker for '+nm(stu(sid))),
+  h('div',{style:'margin-bottom:8px'},nameI),h('div',{class:'row',style:'flex-wrap:wrap;margin-bottom:8px'},cat,type),h('div',{style:'margin-bottom:4px'},goal),box,
+  h('div',{class:'row',style:'margin-top:12px'},h('button',{class:'btn pri',onclick:done},'Save tracker'),h('button',{class:'btn',onclick:()=>{trForm=null;render()}},'Cancel')))}
+function vTrackers(m){
+ if(!S.roster.length)return m.append(empty('Add your class list in Settings first.'));
+ if(trSel&&!stu(trSel))trSel='';
+ const date=trDate||day();
+ m.append(h('div',{class:'card'},h('h2',{},'Trackers'),
+  h('div',{class:'row',style:'flex-wrap:wrap;align-items:center'},
+   osel('Student',[['','All students']].concat(S.roster.map(s=>[s.id,nm(s)])),trSel,v=>{trSel=v;trForm=null;render()}),
+   h('label',{class:'note'},'Date ',h('input',{type:'date',value:date,onchange:e=>{trDate=e.target.value||'';render()}})),
+   h('button',{class:'btn pri',onclick:()=>{if(!trSel)return toast('Choose a student first.');trForm={};render()}},'Make a tracker')),
+  h('p',{class:'note'},'Tap a button to record the result for the date shown. Tap it again to clear it.')));
+ if(trForm){const T=trForm.id&&S.trackers.find(x=>x.id===trForm.id),sid=T?T.sid:trSel;if(sid)m.append(trackerForm(sid))}
+ const stus=S.roster.filter(s=>(!trSel||s.id===trSel)&&S.trackers.some(t=>t.sid===s.id));
+ if(!stus.length)return m.append(empty(trSel?'No trackers for this student yet. Press Make a tracker.':'No trackers yet. Choose a student and press Make a tracker.'));
+ stus.forEach(s=>{m.append(h('h2',{style:'margin:16px 0 8px'},nm(s)));S.trackers.filter(t=>t.sid===s.id).forEach(t=>m.append(trackerCard(t,date,true)))})}
+function trackerPanel(sid){const ts=S.trackers.filter(t=>t.sid===sid);
+ if(!ts.length)return h('div',{class:'card noprint'},h('h2',{},'Trackers'),h('p',{class:'note'},'No trackers for this student yet.'),h('button',{class:'btn',onclick:()=>{trSel=sid;trForm={};view='trackers';render()}},'Make a tracker'));
+ return h('div',{},h('h2',{},'Trackers (today)'),ts.map(T=>trackerCard(T,day(),false)))}
+function trackerSummary(sid){const ts=S.trackers.filter(t=>t.sid===sid);if(!ts.length)return null;
+ return h('div',{class:'card'},h('h2',{},'Goals and trackers'),ts.map(T=>h('div',{class:'item',style:'display:block'},h('strong',{},T.name),T.category?h('span',{class:'tag'},' · '+T.category):null,
+  T.goal?h('div',{class:'note'},'Goal: '+T.goal):null,h('div',{},trSummary(T,pTerm)),trkHist(T,8))))}
 /* ---------- remove a student from one comment ---------- */
 function whoRow(l){
  if(!l.students.length)return h('div',{class:'who'},h('button',{class:'btn sm',onclick:()=>{l.students=[...active];save();renderLive()}},'Assign to selected students'));
@@ -550,7 +616,7 @@ function newId(){S.idYear=S.idYear||String(schoolYear()).slice(2);
  S.idLast=n+1;return 'STU-'+S.idYear+'-'+String(n+1).padStart(3,'0')}
 function migrateIds(){const map={};S.roster.forEach(r=>{if(!ID_RE.test(r.id)){const o=r.id;r.id=newId();map[o]=r.id}});
  if(!Object.keys(map).length)return false;const m=i=>map[i]||i,rk=(o,f)=>{const n={};for(const k in o)n[f(k)]=o[k];return n},mk=k=>{const p=k.split('|'),i=p[0]==='P'?1:0;p[i]=m(p[i]);return p.join('|')};
- S.lines.forEach(l=>l.students=l.students.map(m));S.marks=rk(S.marks,mk);S.ai=rk(S.ai,mk);S.items=rk(S.items,m);S.codes=rk(S.codes,m);
+ S.lines.forEach(l=>l.students=l.students.map(m));S.trackers.forEach(t=>{t.sid=m(t.sid)});S.marks=rk(S.marks,mk);S.ai=rk(S.ai,mk);S.items=rk(S.items,m);S.codes=rk(S.codes,m);
  active=active.map(m);if(selS)selS=m(selS);return true}
 /* ---------- school year ---------- */
 const schoolYear=()=>{const d=new Date();return d.getMonth()>=6?d.getFullYear():d.getFullYear()-1};
